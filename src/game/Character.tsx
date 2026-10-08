@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 /* "Lingo" — the game's original mascot. Drawn around the feet at (0,0),
    roughly 80 wide × 100 tall, heavy black outline (industrial cartoon). */
 import type { Look } from "./types";
@@ -50,8 +51,8 @@ const SW = 4;
 
 const BODY = "M -31 -10 C -35 -44 -29 -82 0 -83 C 29 -82 35 -44 31 -10 C 22 -3 -22 -3 -31 -10 Z";
 
-function Eyes({ face, dir, dead }: { face: string; dir: number; dead?: boolean }) {
-  const px = dir * 2.5;
+function Eyes({ face, dir, dead, blink = false, lx = 0, ly = 0, scared = false }: { face: string; dir: number; dead?: boolean; blink?: boolean; lx?: number; ly?: number; scared?: boolean }) {
+  const px = dir * 2.5 + lx;
   if (dead) {
     return (
       <g stroke={K} strokeWidth={3.5} strokeLinecap="round">
@@ -67,17 +68,26 @@ function Eyes({ face, dir, dead }: { face: string; dir: number; dead?: boolean }
   if (face === "sleepy") {
     return <g fill="none" stroke={K} strokeWidth={3.5} strokeLinecap="round"><path d="M -19 -52 Q -12 -46 -5 -52" /><path d="M 5 -52 Q 12 -46 19 -52" /></g>;
   }
+  if (blink) {
+    return <g fill="none" stroke={K} strokeWidth={3.5} strokeLinecap="round"><path d="M -20 -52 Q -12 -49 -4 -52" /><path d="M 4 -52 Q 12 -49 20 -52" /></g>;
+  }
+  const pr = scared ? 2.6 : 4.2;
   return (
     <g>
-      <ellipse cx={-12} cy={-53} rx={8.5} ry={10.5} fill="#fff" stroke={K} strokeWidth={3} />
-      <ellipse cx={12} cy={-53} rx={8.5} ry={10.5} fill="#fff" stroke={K} strokeWidth={3} />
-      <circle cx={-12 + px} cy={-51} r={4.2} fill={K} />
-      <circle cx={12 + px} cy={-51} r={4.2} fill={K} />
-      <circle cx={-10.5 + px} cy={-53} r={1.4} fill="#fff" />
-      <circle cx={13.5 + px} cy={-53} r={1.4} fill="#fff" />
+      <ellipse cx={-12} cy={-53} rx={8.5} ry={scared ? 12 : 10.5} fill="#fff" stroke={K} strokeWidth={3} />
+      <ellipse cx={12} cy={-53} rx={8.5} ry={scared ? 12 : 10.5} fill="#fff" stroke={K} strokeWidth={3} />
+      <circle cx={-12 + px} cy={-51 + ly} r={pr} fill={K} />
+      <circle cx={12 + px} cy={-51 + ly} r={pr} fill={K} />
+      <circle cx={-10.5 + px} cy={-53 + ly} r={1.4} fill="#fff" />
+      <circle cx={13.5 + px} cy={-53 + ly} r={1.4} fill="#fff" />
     </g>
   );
 }
+
+/* text-bearing extras must not be mirrored when the character turns */
+const TEXT_EXTRAS = new Set(["hello", "lanyard", "pinEN", "pinES"]);
+
+const hash = (s: string) => { let h = 7; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 9973; return h / 9973; };
 
 function Face({ face }: { face: string }) {
   switch (face) {
@@ -146,59 +156,141 @@ function Extra({ extra }: { extra: string }) {
   }
 }
 
-export function Lingo({ look, dir = 1, moving = false, ghost = false, dead = false, t = 0 }: { look: Look; dir?: number; moving?: boolean; ghost?: boolean; dead?: boolean; t?: number }) {
+/* ---- shared animation clock (one rAF for every badge on screen) ---- */
+const clockSubs = new Set<(t: number) => void>();
+let clockRaf = 0;
+function clockLoop(ms: number) {
+  clockSubs.forEach((fn) => fn(ms / 1000));
+  clockRaf = clockSubs.size ? requestAnimationFrame(clockLoop) : 0;
+}
+export function useClock(active = true, fps = 30) {
+  const [t, setT] = useState(() => performance.now() / 1000);
+  useEffect(() => {
+    if (!active) return;
+    let last = 0;
+    const fn = (now: number) => { if (now - last >= 1 / fps) { last = now; setT(now); } };
+    clockSubs.add(fn);
+    if (!clockRaf) clockRaf = requestAnimationFrame(clockLoop);
+    return () => { clockSubs.delete(fn); };
+  }, [active, fps]);
+  return t;
+}
+
+export interface LingoProps {
+  look: Look;
+  dir?: number;
+  moving?: boolean;
+  ghost?: boolean;
+  dead?: boolean;
+  /* seconds — drives every animation */
+  t?: number;
+  /* per-character offset so a crowd doesn't breathe in sync */
+  seed?: string;
+  /* emotion overlays */
+  scared?: boolean;
+  happy?: boolean;
+}
+
+export function Lingo({ look, dir = 1, moving = false, ghost = false, dead = false, t = 0, seed = "", scared = false, happy = false }: LingoProps) {
   const col = COLORS[look.color] || COLORS[0];
-  const bob = moving ? Math.abs(Math.sin(t * 12)) * -4 : 0;
-  const step = moving ? Math.sin(t * 12) * 4 : 0;
+  const ph = hash(seed || String(look.color) + look.hat) * 10;
+  const tt = t + ph;
+
   if (dead) {
+    const spin = (tt * 120) % 360;
     return (
-      <g transform="translate(0,-14) rotate(-84)">
-        <g transform="translate(0,40)">
-          <path d={BODY} fill={col.c} stroke={K} strokeWidth={SW} strokeLinejoin="round" />
-          <Eyes face="none" dir={1} dead />
-          <path d="M -8 -34 Q 0 -30 8 -34" fill="none" stroke={K} strokeWidth={3} strokeLinecap="round" />
+      <g>
+        <ellipse cx={0} cy={0} rx={46} ry={9} fill="rgba(0,0,0,0.3)" />
+        <g transform="translate(0,-14) rotate(-84)">
+          <g transform="translate(0,40)">
+            <path d={BODY} fill={col.c} stroke={K} strokeWidth={SW} strokeLinejoin="round" />
+            <Eyes face="none" dir={1} dead />
+            <path d="M -8 -34 Q 0 -30 8 -34" fill="none" stroke={K} strokeWidth={3} strokeLinecap="round" />
+          </g>
         </g>
-        <g fill="#f5c518" stroke={K} strokeWidth={2} transform="rotate(84)">
-          {[[-26, -46], [6, -58], [30, -40]].map(([x, y], i) => <path key={i} d={`M ${x} ${y - 7} L ${x + 2} ${y - 2} L ${x + 7} ${y} L ${x + 2} ${y + 2} L ${x} ${y + 7} L ${x - 2} ${y + 2} L ${x - 7} ${y} L ${x - 2} ${y - 2} Z`} />)}
+        <g transform={`translate(0,-46) rotate(${spin})`} fill="#f5c518" stroke={K} strokeWidth={2}>
+          {[0, 120, 240].map((a) => {
+            const x = Math.cos((a * Math.PI) / 180) * 26, y = Math.sin((a * Math.PI) / 180) * 9;
+            return <path key={a} d={`M ${x} ${y - 7} L ${x + 2} ${y - 2} L ${x + 7} ${y} L ${x + 2} ${y + 2} L ${x} ${y + 7} L ${x - 2} ${y + 2} L ${x - 7} ${y} L ${x - 2} ${y - 2} Z`} />;
+          })}
         </g>
       </g>
     );
   }
+
+  /* --- rig --- */
+  const walk = moving ? tt * 13 : 0;
+  const stepS = Math.sin(walk);
+  const bob = moving ? -Math.abs(stepS) * 7 : 0;
+  const breathe = moving ? 0 : Math.sin(tt * 2.6) * 0.03;
+  const squash = moving ? Math.abs(Math.cos(walk)) * 0.07 : 0;
+  const sx = 1 + squash * 0.6 - breathe * 0.6;
+  const sy = 1 - squash + breathe;
+  const lean = moving ? dir * 7 + stepS * 2 : Math.sin(tt * 0.9) * 1.5;
+  const legL = moving ? stepS * 7 : 0;
+  const liftL = moving ? Math.max(0, -stepS) * 5 : 0;
+  const liftR = moving ? Math.max(0, stepS) * 5 : 0;
+  const arm = moving ? stepS * 14 : Math.sin(tt * 2.6) * 3;
+  const blinkCycle = (tt % 3.9);
+  const blink = !scared && blinkCycle < 0.13;
+  const glance = moving ? 0 : Math.sin(tt * 0.7) > 0.6 ? 2.5 : Math.sin(tt * 0.7) < -0.7 ? -2.5 : 0;
+  const lookUp = !moving && Math.sin(tt * 0.45) > 0.85 ? -2 : 0;
+  const tuft = Math.sin(tt * (moving ? 10 : 2)) * (moving ? 10 : 4);
+  const ghostFloat = ghost ? Math.sin(tt * 2.2) * 6 - 10 : 0;
+  const wave = ghost ? Math.sin(tt * 5) * 3 : 0;
+  const flip = dir < 0 ? -1 : 1;
+
   return (
-    <g opacity={ghost ? 0.5 : 1}>
-      {!ghost && <ellipse cx={0} cy={0} rx={30} ry={7} fill="rgba(0,0,0,0.28)" />}
-      <g transform={`translate(0,${bob})`}>
-        {ghost ? (
-          <path d="M -31 -10 C -35 -44 -29 -82 0 -83 C 29 -82 35 -44 31 -10 Q 24 -2 18 -10 Q 10 0 3 -10 Q -5 0 -12 -10 Q -20 -2 -31 -10 Z" fill={col.c} stroke={K} strokeWidth={SW} strokeLinejoin="round" />
-        ) : (
+    <g opacity={ghost ? 0.55 : 1}>
+      {!ghost && <ellipse cx={0} cy={0} rx={30 - Math.abs(bob) * 0.8} ry={7} fill="rgba(0,0,0,0.28)" />}
+      <g transform={`translate(0,${bob + ghostFloat})`}>
+        {/* feet stay under the body; they lift and slide with the step */}
+        {!ghost && (
           <>
-            <ellipse cx={-13 + step} cy={-5} rx={11} ry={7} fill={col.d} stroke={K} strokeWidth={SW} />
-            <ellipse cx={13 - step} cy={-5} rx={11} ry={7} fill={col.d} stroke={K} strokeWidth={SW} />
-            <path d={BODY} fill={col.c} stroke={K} strokeWidth={SW} strokeLinejoin="round" />
+            <ellipse cx={-13 + legL} cy={-5 - liftL} rx={11} ry={7} fill={col.d} stroke={K} strokeWidth={SW} />
+            <ellipse cx={13 - legL} cy={-5 - liftR} rx={11} ry={7} fill={col.d} stroke={K} strokeWidth={SW} />
           </>
         )}
-        <path d="M -22 -24 C -24 -40 -22 -64 -10 -72" fill="none" stroke="rgba(255,255,255,0.35)" strokeWidth={5} strokeLinecap="round" />
-        <path d="M 24 -18 C 28 -30 28 -50 22 -66" fill="none" stroke={col.d} strokeWidth={6} strokeLinecap="round" opacity={0.6} />
-        <ellipse cx={-34 + (moving ? step * 0.6 : 0)} cy={-34} rx={6} ry={9} fill={col.c} stroke={K} strokeWidth={3.5} />
-        <ellipse cx={34 - (moving ? step * 0.6 : 0)} cy={-34} rx={6} ry={9} fill={col.c} stroke={K} strokeWidth={3.5} />
-        <circle cx={-21} cy={-39} r={4.5} fill="#ff8f8f" opacity={0.55} />
-        <circle cx={21} cy={-39} r={4.5} fill="#ff8f8f" opacity={0.55} />
-        <Eyes face={look.face} dir={dir} />
-        <path d="M -6 -37 Q 0 -32 6 -37" fill="none" stroke={K} strokeWidth={3} strokeLinecap="round" />
-        <Face face={look.face} />
-        <Extra extra={look.extra} />
-        <Hat hat={look.hat} />
-        {ghost && <ellipse cx={0} cy={-112} rx={16} ry={5} fill="none" stroke="#f5c518" strokeWidth={3} />}
+        <g transform={`rotate(${lean} 0 -10) scale(${sx} ${sy}) translate(0 ${(1 - sy) * -10})`}>
+          <g transform={`scale(${flip} 1)`}>
+            {ghost ? (
+              <path d={`M -31 -10 C -35 -44 -29 -82 0 -83 C 29 -82 35 -44 31 -10 Q 24 ${-2 + wave} 18 -10 Q 10 ${0 - wave} 3 -10 Q -5 ${0 + wave} -12 -10 Q -20 ${-2 - wave} -31 -10 Z`} fill={col.c} stroke={K} strokeWidth={SW} strokeLinejoin="round" />
+            ) : (
+              <path d={BODY} fill={col.c} stroke={K} strokeWidth={SW} strokeLinejoin="round" />
+            )}
+            <path d="M -22 -24 C -24 -40 -22 -64 -10 -72" fill="none" stroke="rgba(255,255,255,0.35)" strokeWidth={5} strokeLinecap="round" />
+            <path d="M 24 -18 C 28 -30 28 -50 22 -66" fill="none" stroke={col.d} strokeWidth={6} strokeLinecap="round" opacity={0.6} />
+            {/* arms swing opposite to the feet */}
+            <g transform={`rotate(${arm} -33 -42)`}><ellipse cx={-35} cy={-33} rx={6} ry={9.5} fill={col.c} stroke={K} strokeWidth={3.5} /></g>
+            <g transform={`rotate(${-arm} 33 -42)`}><ellipse cx={35} cy={-33} rx={6} ry={9.5} fill={col.c} stroke={K} strokeWidth={3.5} /></g>
+            <circle cx={-21} cy={-39} r={4.5} fill="#ff8f8f" opacity={happy ? 0.9 : 0.55} />
+            <circle cx={21} cy={-39} r={4.5} fill="#ff8f8f" opacity={happy ? 0.9 : 0.55} />
+            <Eyes face={look.face} dir={1} blink={blink} lx={glance} ly={lookUp} scared={scared} />
+            {scared
+              ? <ellipse cx={0} cy={-34} rx={4} ry={5} fill={K} />
+              : happy
+                ? <path d="M -8 -38 Q 0 -27 8 -38 Z" fill={K} />
+                : <path d="M -6 -37 Q 0 -32 6 -37" fill="none" stroke={K} strokeWidth={3} strokeLinecap="round" />}
+            <Face face={look.face} />
+            {!TEXT_EXTRAS.has(look.extra) && <Extra extra={look.extra} />}
+            <g transform={look.hat === "none" ? `rotate(${tuft} 0 -82)` : `rotate(${tuft * 0.25} 0 -80)`}>
+              <Hat hat={look.hat} />
+            </g>
+          </g>
+          {TEXT_EXTRAS.has(look.extra) && <g transform={`translate(${flip < 0 && look.extra.startsWith("pin") ? 32 : 0} 0)`}><Extra extra={look.extra} /></g>}
+        </g>
+        {ghost && <ellipse cx={0} cy={-114} rx={16} ry={5} fill="none" stroke="#f5c518" strokeWidth={3} opacity={0.6 + Math.sin(tt * 4) * 0.4} />}
       </g>
     </g>
   );
 }
 
-/* standalone SVG for menus, lobby, voting */
-export function LingoBadge({ look, size = 80, ghost, dead, style }: { look: Look; size?: number; ghost?: boolean; dead?: boolean; style?: React.CSSProperties }) {
+/* standalone animated SVG for menus, lobby, voting */
+export function LingoBadge({ look, size = 80, ghost, dead, style, animate = true, seed, happy, scared }: { look: Look; size?: number; ghost?: boolean; dead?: boolean; style?: React.CSSProperties; animate?: boolean; seed?: string; happy?: boolean; scared?: boolean }) {
+  const t = useClock(animate, 24);
   return (
     <svg viewBox="-50 -124 100 132" width={size} height={size * 1.32} style={{ display: "block", overflow: "visible", ...style }} aria-hidden>
-      <Lingo look={look} ghost={ghost} dead={dead} />
+      <Lingo look={look} ghost={ghost} dead={dead} t={animate ? t : 0} seed={seed} happy={happy} scared={scared} />
     </svg>
   );
 }

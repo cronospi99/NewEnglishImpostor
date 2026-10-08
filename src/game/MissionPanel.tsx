@@ -3,6 +3,7 @@ import { pick, shuffle } from "../shared/random";
 import type { Lang } from "../shared/proximity";
 import { mcqBank, missionDefs, orderBank, sortBank, spotBank, tierFor, type MCQ } from "./missions";
 import { rooms, type Station } from "./map";
+import { sfx } from "./sfx";
 
 type Props = { station: Station; level: string; lang: Lang; fake: boolean; onDone: () => void; onClose: () => void };
 
@@ -17,10 +18,11 @@ export function MissionPanel({ station, level, lang, fake, onDone, onClose }: Pr
   const win = () => {
     if (round + 1 >= def.rounds) {
       setComplete(true);
+      sfx.task();
       if (!fake) onDone();
-    } else setRound((r) => r + 1);
+    } else { setRound((r) => r + 1); sfx.step(); }
   };
-  const miss = () => setShake((n) => n + 1);
+  const miss = () => { setShake((n) => n + 1); sfx.wrong(); };
 
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 50, background: "rgba(14,17,19,0.78)", display: "flex", alignItems: "center", justifyContent: "center", padding: 12 }}>
@@ -42,7 +44,8 @@ export function MissionPanel({ station, level, lang, fake, onDone, onClose }: Pr
           </div>
 
           {complete ? (
-            <div style={{ textAlign: "center", padding: "10px 0 4px", animation: "popIn .3s" }}>
+            <div style={{ position: "relative", textAlign: "center", padding: "10px 0 4px", animation: "popIn .3s" }}>
+              <Confetti />
               <div style={{ font: "400 26px 'Archivo Black',sans-serif", color: fake ? "#f07a1a" : "#7bbf5a", textTransform: "uppercase" }}>{fake ? (lang === "es" ? "Misión fingida" : "Mission faked") : lang === "es" ? "¡Misión completa!" : "Mission complete!"}</div>
               <div style={{ margin: "12px auto 16px", maxWidth: "36ch", fontSize: 16, lineHeight: 1.5 }}>
                 <b style={{ color: room.accent }}>{room.en}</b> — {room.about}
@@ -190,7 +193,9 @@ function OrderTask({ id, tiers, onWin, onMiss }: TaskProps & { id: "unscramble" 
 function SpotTask({ tiers, onWin, onMiss }: TaskProps) {
   const item = useRef(pick(tiers.flatMap((t) => spotBank[t]))).current;
   const [found, setFound] = useState(false);
-  useEffect(() => { if (found) { const t = setTimeout(onWin, 900); return () => clearTimeout(t); } }, [found, onWin]);
+  const winRef = useRef(onWin);
+  winRef.current = onWin;
+  useEffect(() => { if (found) { const t = setTimeout(() => winRef.current(), 900); return () => clearTimeout(t); } }, [found]);
   return (
     <div style={{ background: "#f2efe6", color: "#0e1113", border: "3px solid #0e1113", borderRadius: 4, padding: "18px 14px", backgroundImage: "repeating-linear-gradient(0deg,transparent 0 30px,rgba(58,91,199,0.25) 30px 32px)" }}>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center", fontSize: 21, fontFamily: "'Space Mono',monospace" }}>
@@ -202,6 +207,19 @@ function SpotTask({ tiers, onWin, onMiss }: TaskProps) {
         ))}
       </div>
       {found && <div style={{ textAlign: "center", marginTop: 10, color: "#b4441f", fontWeight: 800, fontSize: 18 }}>✓ {item.fix}</div>}
+    </div>
+  );
+}
+
+function Confetti() {
+  const bits = useRef(Array.from({ length: 26 }, (_, i) => ({
+    x: Math.random() * 100, d: 0.6 + Math.random() * 0.9, r: Math.random() * 360, c: ["#f5c518", "#7bbf5a", "#f07a1a", "#3fa7d6", "#e98fc0"][i % 5], delay: Math.random() * 0.2
+  }))).current;
+  return (
+    <div style={{ position: "absolute", inset: "-20px 0 0", pointerEvents: "none", overflow: "hidden" }}>
+      {bits.map((b, i) => (
+        <span key={i} style={{ position: "absolute", left: b.x + "%", top: -10, width: 8, height: 12, background: b.c, border: "1.5px solid #0e1113", transform: `rotate(${b.r}deg)`, animation: `confetti ${b.d}s ease-in ${b.delay}s both` }} />
+      ))}
     </div>
   );
 }

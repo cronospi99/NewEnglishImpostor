@@ -128,8 +128,77 @@ export const stations: Station[] = [
 ];
 
 export const BELL = { x: 1180, y: 970 };
-export const RANGE = { use: 110, kill: 130, report: 150, bell: 150 };
-export const VISION = { crew: 360, impostor: 470 };
+export const RANGE = { use: 110, kill: 130, report: 150, bell: 150, vent: 95, fix: 110 };
+export const VISION = { crew: 360, impostor: 470, lightsOut: 0.38 };
+
+/* impostor vents: linked vents form a network you can hop through */
+export interface Vent { id: string; x: number; y: number; room: string; links: string[] }
+export const vents: Vent[] = [
+  { id: "v-kids", x: 380, y: 462, room: "kids", links: ["v-cafe"] },
+  { id: "v-cafe", x: 530, y: 1120, room: "cafe", links: ["v-kids", "v-teachers"] },
+  { id: "v-teachers", x: 210, y: 1800, room: "teachers", links: ["v-cafe"] },
+  { id: "v-library", x: 1150, y: 445, room: "library", links: ["v-reception"] },
+  { id: "v-reception", x: 1600, y: 965, room: "reception", links: ["v-library", "v-exam"] },
+  { id: "v-exam", x: 1185, y: 1785, room: "exam", links: ["v-reception"] },
+  { id: "v-lab", x: 1410, y: 445, room: "lab", links: ["v-adults"] },
+  { id: "v-adults", x: 1860, y: 1140, room: "adults", links: ["v-lab", "v-office", "v-speaking"] },
+  { id: "v-office", x: 1410, y: 1790, room: "office", links: ["v-adults"] },
+  { id: "v-speaking", x: 2060, y: 1790, room: "speaking", links: ["v-adults"] }
+];
+
+/* sabotage repair points */
+export const FUSE = { x: 1300, y: 1290, label: "Fuse box" };
+export const ALARM_PANELS: { id: "A" | "B"; x: number; y: number; room: string }[] = [
+  { id: "A", x: 820, y: 430, room: "library" },
+  { id: "B", x: 1790, y: 1500, room: "office" }
+];
+
+/* ---- line of sight: walls block vision (furniture doesn't) ---- */
+const CELL = 10;
+const GW = Math.ceil(WORLD.w / CELL), GH = Math.ceil(WORLD.h / CELL);
+let floorGrid: Uint8Array | null = null;
+function grid() {
+  if (floorGrid) return floorGrid;
+  const g = new Uint8Array(GW * GH);
+  const mark = (r: Rect) => {
+    for (let y = Math.floor(r.y / CELL); y < Math.ceil((r.y + r.h) / CELL); y++)
+      for (let x = Math.floor(r.x / CELL); x < Math.ceil((r.x + r.w) / CELL); x++)
+        if (x >= 0 && y >= 0 && x < GW && y < GH) g[y * GW + x] = 1;
+  };
+  rooms.forEach((r) => mark(r.r));
+  halls.forEach(mark);
+  doors.forEach(mark);
+  floorGrid = g;
+  return g;
+}
+export function isFloor(x: number, y: number) {
+  const cx = Math.floor(x / CELL), cy = Math.floor(y / CELL);
+  if (cx < 0 || cy < 0 || cx >= GW || cy >= GH) return false;
+  return grid()[cy * GW + cx] === 1;
+}
+
+/* ray-marched visibility polygon around the eye, as an SVG points string */
+export function sightPolygon(ex: number, ey: number, radius: number, rays = 160): string {
+  const pts: string[] = [];
+  const step = 7;
+  for (let i = 0; i < rays; i++) {
+    const a = (i / rays) * Math.PI * 2;
+    const dx = Math.cos(a), dy = Math.sin(a);
+    let d = 0;
+    while (d < radius) {
+      d += step;
+      if (!isFloor(ex + dx * d, ey + dy * d)) { d += 18; break; }
+    }
+    d = Math.min(d, radius);
+    pts.push(`${Math.round(ex + dx * d)},${Math.round(ey + dy * d)}`);
+  }
+  return pts.join(" ");
+}
+
+/* ghosts float through walls but stay inside the building */
+export function ghostMove(x: number, y: number, dx: number, dy: number) {
+  return { x: Math.max(60, Math.min(WORLD.w - 60, x + dx)), y: Math.max(60, Math.min(WORLD.h - 40, y + dy)) };
+}
 export const SPEED = 330; // units / second
 export const RADIUS = 20;
 
@@ -164,3 +233,13 @@ export function roomAt(x: number, y: number): Room | null {
 }
 
 export const dist = (a: { x: number; y: number }, b: { x: number; y: number }) => Math.hypot(a.x - b.x, a.y - b.y);
+
+/* true when nothing but floor lies between a and b */
+export function lineOfSight(a: { x: number; y: number }, b: { x: number; y: number }) {
+  const d = Math.hypot(b.x - a.x, b.y - a.y);
+  const n = Math.ceil(d / 9);
+  for (let i = 1; i < n; i++) {
+    if (!isFloor(a.x + ((b.x - a.x) * i) / n, a.y + ((b.y - a.y) * i) / n)) return false;
+  }
+  return true;
+}

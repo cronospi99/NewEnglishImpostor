@@ -2,12 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
 import * as E from "./engine";
 import { Relay, makeCode, makeId, type NetStatus } from "./net";
-import type { FromHost, HostState, Pos, PosMsg, PublicPlayer, Settings, ToHost } from "./types";
+import { defaultSettings, type FromHost, type HostState, type Pos, type PosMsg, type PublicPlayer, type Settings, type ToHost } from "./types";
 import { Header } from "../shared/Header";
 import { g } from "./i18n";
-import { LingoBadge, Lingo } from "./Character";
+import { LingoBadge, Lingo, useClock } from "./Character";
 import { MapDefs, MapStatic } from "./MapView";
-import { WORLD } from "./map";
+import { ALARM_PANELS, FUSE, WORLD } from "./map";
+import { ChatFeed, MeetingSplash, SoundToggle } from "./ui";
+import { sfx, startSiren, stopSiren, unlockAudio } from "./sfx";
 import { Hatch } from "../classic/ClassicGame";
 
 const KEY = "impostor.host";
@@ -17,7 +19,11 @@ function restore(): { code: string; hostId: string; state: HostState } {
     const raw = sessionStorage.getItem(KEY);
     if (raw) {
       const v = JSON.parse(raw);
-      if (v && v.code && v.state) return v;
+      if (v && v.code && v.state) {
+        /* merge defaults so a session saved by an older version still works */
+        v.state = { ...E.createState(v.code), ...v.state, settings: { ...defaultSettings, ...v.state.settings } };
+        return v;
+      }
     }
   } catch { /* ignore */ }
   const code = makeCode();
@@ -34,8 +40,11 @@ export function Host({ onExit }: { onExit: () => void }) {
   const [net, setNet] = useState<NetStatus>("connecting");
   const [qr, setQr] = useState("");
   const [teacherView, setTeacherView] = useState(false);
+  const [tqr, setTqr] = useState("");
+  const [splash, setSplash] = useState<{ reason: string; caller: string; victim?: string } | null>(null);
   const T = g(s.settings.lang);
   const joinUrl = `${location.origin}/join/${init.code}`;
+  const teacherUrl = joinUrl + "?teacher=1";
 
   const deliver = useCallback((outs: E.Out[]) => {
     outs.forEach((o) => relay.current?.send(o.msg, o.to));
@@ -71,11 +80,12 @@ export function Host({ onExit }: { onExit: () => void }) {
       const m = env.d as ToHost | PosMsg;
       const id = env.f;
       if (!m || typeof m !== "object") return;
-      if (m.k === "pos") { pos.current[id] = { x: m.x, y: m.y, dir: m.dir, moving: m.m }; return; }
+      if (m.k === "pos") { pos.current[id] = { x: m.x, y: m.y, dir: m.dir, moving: m.m, vent: m.v }; return; }
+      if ((m as { k: string }).k === "emote" || (m as { k: string }).k === "ventfx") return;
       apply((d, now) => {
         switch (m.k) {
           case "hello": {
-            const outs = E.hello(d, id, m.name, m.look);
+            const outs = E.hello(d, id, m.name, m.look, !!m.teacher);
             const p = d.players.find((x) => x.id === id);
             if (p && d.phase !== "lobby" && p.tasks.length) outs.push({ to: id, msg: { k: "secret", s: E.secretFor(d, id, now) } });
             return outs;
@@ -87,6 +97,10 @@ export function Host({ onExit }: { onExit: () => void }) {
           case "task": return E.taskDone(d, id, m.station, now);
           case "clue": return E.clue(d, id, m.text, now);
           case "vote": return E.vote(d, id, m.target, now);
+          case "chat": return E.chat(d, id, m.text, now);
+          case "sabotage": return E.sabotage(d, id, m.kind, now);
+          case "fixLights": return E.fixLights(d, id, pos.current, now);
+          case "hold": return E.hold(d, id, m.panel, m.on, pos.current, now);
         }
       });
     });
@@ -99,9 +113,10 @@ export function Host({ onExit }: { onExit: () => void }) {
     const iv = setInterval(() => {
       const cur = ref.current;
       const probe: HostState = structuredClone(cur);
-      const outs = E.tick(probe, Date.now());
-      const changed = outs.length || probe.phase !== cur.phase || probe.meeting?.stage !== cur.meeting?.stage || probe.phaseEndsAt !== cur.phaseEndsAt;
-      if (changed) apply((d, now) => E.tick(d, now));
+      const outs = E.tick(probe, Date.now(), pos.current);
+      const changed = outs.length || probe.phase !== cur.phase || probe.meeting?.stage !== cur.meeting?.stage || probe.phaseEndsAt !== cur.phaseEndsAt
+        || JSON.stringify(probe.sabotage) !== JSON.stringify(cur.sabotage);
+      if (changed) apply((d, now) => E.tick(d, now, pos.current));
       else if (++beat % 8 === 0) broadcast(cur);
     }, 250);
     return () => clearInterval(iv);
@@ -113,13 +128,30 @@ export function Host({ onExit }: { onExit: () => void }) {
 
   useEffect(() => {
     QRCode.toDataURL(joinUrl, { margin: 1, width: 480, errorCorrectionLevel: "M", color: { dark: "#0e1113", light: "#f2efe6" } }).then(setQr).catch(() => setQr(""));
-  }, [joinUrl]);
+    QRCode.toDataURL(teacherUrl, { margin: 1, width: 240, errorCorrectionLevel: "M", color: { dark: "#0e1113", light: "#f5c518" } }).then(setTqr).catch(() => setTqr(""));
+  }, [joinUrl, teacherUrl]);
+
+  /* projector sounds + meeting splash */
+  const phaseKey = s.phase + (s.meeting ? ":" + s.meeting.reason + s.meeting.caller : "");
+  useEffect(() => {
+    if (s.phase === "meeting" && s.meeting && s.meeting.stage === "clues") {
+      setSplash({ reason: s.meeting.reason, caller: s.meeting.caller, victim: s.meeting.victim });
+      if (s.meeting.reason === "report") sfx.report(); else sfx.meeting();
+      const t = setTimeout(() => setSplash(null), 2600);
+      return () => clearTimeout(t);
+    }
+    if (s.phase === "eject") sfx.eject();
+    if (s.phase === "end") { if (s.winner === "crew") sfx.win(); else sfx.lose(); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phaseKey]);
+  const alarmOn = s.phase === "play" && s.sabotage?.kind === "alarm";
+  useEffect(() => { if (alarmOn) { startSiren(); return () => stopSiren(); } }, [alarmOn]);
 
   const setSetting = <K extends keyof Settings>(k: K, v: Settings[K]) => apply((d) => { d.settings[k] = v; });
   const newRoom = () => { try { sessionStorage.removeItem(KEY); } catch { /* ignore */ } location.reload(); };
 
   const pub = useMemo(() => E.publicState(s, Date.now()), [s]);
-  const now = useNow(s.phase === "meeting" || s.phase === "reveal" || s.phase === "eject");
+  const now = useNow(s.phase === "meeting" || s.phase === "reveal" || s.phase === "eject" || !!s.sabotage);
   const msLeft = s.phase === "meeting" && s.meeting ? Math.max(0, s.meeting.endsAt - now) : Math.max(0, s.phaseEndsAt - now);
   const name = (id?: string) => (id === "teacher" ? (s.settings.lang === "es" ? "el profesor" : "the teacher") : s.players.find((p) => p.id === id)?.name || "?");
   const tt = E.taskTotals(s);
@@ -136,6 +168,8 @@ export function Host({ onExit }: { onExit: () => void }) {
           { label: T.home, onClick: onExit }
         ]}
       />
+
+      {splash && <MeetingSplash T={T} pub={pub} {...splash} />}
 
       {s.phase === "lobby" && (
         <div className="stack-sm pad-sm" style={{ flex: 1, display: "grid", gridTemplateColumns: "minmax(min(340px,100%),0.8fr) minmax(min(420px,100%),1.2fr)", gap: 36, padding: "30px 30px", alignItems: "start" }}>
@@ -163,8 +197,8 @@ export function Host({ onExit }: { onExit: () => void }) {
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(112px,1fr))", gap: 10 }}>
                 {s.players.map((p) => (
                   <div key={p.id} className="well" style={{ padding: "8px 6px 8px", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, animation: "popIn .3s", opacity: p.connected ? 1 : 0.4 }}>
-                    <div style={{ animation: "bob 1.6s ease-in-out infinite" }}><LingoBadge look={p.look} size={58} /></div>
-                    <div style={{ fontWeight: 800, fontSize: 14, textAlign: "center", wordBreak: "break-word" }}>{p.name}</div>
+                    <LingoBadge look={p.look} size={58} seed={p.id} />
+                    <div style={{ fontWeight: 800, fontSize: 14, textAlign: "center", wordBreak: "break-word" }}>{p.teacher ? "🎓 " : ""}{p.name}</div>
                     {p.score > 0 && <div style={{ font: "700 11px 'Space Mono',monospace", color: "#f5c518" }}>★ {p.score}</div>}
                     <button type="button" onClick={() => apply((d) => E.kick(d, p.id))} style={{ border: 0, background: "transparent", color: "rgba(242,239,230,0.4)", fontSize: 11, cursor: "pointer", textDecoration: "underline" }}>{T.kick}</button>
                   </div>
@@ -183,11 +217,24 @@ export function Host({ onExit }: { onExit: () => void }) {
                 <Setting label={T.sees} opts={[["decoy", T.decoy], ["hint", T.hint]]} cur={s.settings.impostorSees} onPick={(v) => setSetting("impostorSees", v)} />
                 <Setting label={T.clueTime} opts={[[30, "30s"], [40, "40s"], [60, "60s"]]} cur={s.settings.clueSecs} onPick={(v) => setSetting("clueSecs", v)} />
                 <Setting label={T.voteTime} opts={[[30, "30s"], [40, "40s"], [60, "60s"]]} cur={s.settings.voteSecs} onPick={(v) => setSetting("voteSecs", v)} />
+                <Setting label={T.sabotageOpt} opts={[[1, T.on], [0, T.off]]} cur={s.settings.sabotage ? 1 : 0} onPick={(v) => setSetting("sabotage", !!v)} />
+                <Setting label={T.ventsOpt} opts={[[1, T.on], [0, T.off]]} cur={s.settings.vents ? 1 : 0} onPick={(v) => setSetting("vents", !!v)} />
+                <Setting label={T.chatOpt} opts={[["quick", T.quickOnly], ["free", T.freeText]]} cur={s.settings.chat} onPick={(v) => setSetting("chat", v)} />
+              </div>
+            </div>
+
+            <div className="plate" style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
+              {tqr && <img src={tqr} alt="Teacher QR" style={{ width: 120, height: 120, border: "3px solid #0e1113", borderRadius: 6, imageRendering: "pixelated" }} />}
+              <div style={{ flex: 1, minWidth: 200 }}>
+                <div className="lbl lbl-y" style={{ marginBottom: 6 }}>🎓 {T.teacherPlays}</div>
+                <div style={{ fontSize: 14, color: "rgba(242,239,230,0.7)", marginBottom: 10 }}>{T.teacherPlaysHelp}</div>
+                <button type="button" className="btn btn-s btn-sm" onClick={() => window.open(teacherUrl, "_blank", "width=420,height=860")}>{T.openWindow}</button>
               </div>
             </div>
 
             <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
-              <button type="button" className="btn btn-y btn-big" disabled={!E.canStart(s)} onClick={() => apply((d, n) => E.startGame(d, n))}>{T.start}</button>
+              <button type="button" className="btn btn-y btn-big" disabled={!E.canStart(s)} onClick={() => { unlockAudio(); apply((d, n) => E.startGame(d, n)); }}>{T.start}</button>
+              <SoundToggle T={T} />
               {!E.canStart(s) && <span className="lbl">{T.needThree}</span>}
             </div>
           </div>
@@ -217,7 +264,14 @@ export function Host({ onExit }: { onExit: () => void }) {
             <button type="button" className="btn btn-o btn-sm" onClick={() => apply((d, n) => E.teacherMeeting(d, n))}>{T.callMeeting}</button>
             <button type="button" className="btn btn-s btn-sm" onClick={() => apply((d, n) => E.endGame(d, n))}>{T.endGame}</button>
           </div>
-          <HostMap players={s.players} pos={pos} bodies={teacherView ? s.bodies : []} show={teacherView} />
+          {s.sabotage && (
+            <div style={{ padding: "12px 16px", border: "3px solid #0e1113", borderRadius: 5, background: "#b4441f", color: "#fff3e0", font: "700 18px 'Space Mono',monospace", animation: "blink 1s infinite" }}>
+              {s.sabotage.kind === "alarm"
+                ? `🚨 ${T.fireAlarm} — ${Math.ceil(Math.max(0, s.sabotage.endsAt - now) / 1000)}s · ${T.alarmMsg}`
+                : `💡 ${T.lightsOut} — ${T.lightsMsg}`}
+            </div>
+          )}
+          <HostMap players={s.players} pos={pos} bodies={teacherView ? s.bodies : []} show={teacherView} sabotage={s.sabotage?.kind} held={s.sabotage ? Object.keys(s.sabotage.holds).filter((k) => s.sabotage!.holds[k].length) : []} />
         </div>
       )}
 
@@ -241,7 +295,13 @@ export function Host({ onExit }: { onExit: () => void }) {
               <button type="button" className="btn btn-s" onClick={() => apply((d, n) => E.skipStage(d, n))}>{T.skip}</button>
             </div>
           </div>
-          <MeetingBoard pub={pub} lang={s.settings.lang} />
+          <div className="stack-sm" style={{ display: "grid", gridTemplateColumns: "minmax(0,1.6fr) minmax(min(300px,100%),1fr)", gap: 20, alignItems: "start" }}>
+            <MeetingBoard pub={pub} lang={s.settings.lang} big />
+            <div className="plate">
+              <div className="lbl lbl-y" style={{ marginBottom: 10 }}>💬 {T.chat}</div>
+              <ChatFeed pub={pub} max={10} big />
+            </div>
+          </div>
         </div>
       )}
 
@@ -309,13 +369,8 @@ export function TaskBar({ label, done, total }: { label: string; done: number; t
 }
 
 /* projector map: floor plan scaled to fit; players only in teacher view */
-function HostMap({ players, pos, bodies, show }: { players: HostState["players"]; pos: React.MutableRefObject<Record<string, Pos>>; bodies: HostState["bodies"]; show: boolean }) {
-  const [, setT] = useState(0);
-  useEffect(() => {
-    if (!show) return;
-    const iv = setInterval(() => setT((t) => t + 1), 100);
-    return () => clearInterval(iv);
-  }, [show]);
+function HostMap({ players, pos, bodies, show, sabotage, held }: { players: HostState["players"]; pos: React.MutableRefObject<Record<string, Pos>>; bodies: HostState["bodies"]; show: boolean; sabotage?: string; held: string[] }) {
+  const t = useClock(true, show ? 30 : 6);
   return (
     <div style={{ flex: 1, minHeight: 300, border: "4px solid #0e1113", borderRadius: 6, overflow: "hidden", background: "#141a1d", boxShadow: "0 6px 0 #0e1113" }}>
       <svg viewBox={`40 20 ${WORLD.w - 40} ${WORLD.h - 20}`} preserveAspectRatio="xMidYMid meet" style={{ width: "100%", height: "100%", display: "block", maxHeight: "calc(100vh - 190px)" }}>
@@ -325,12 +380,15 @@ function HostMap({ players, pos, bodies, show }: { players: HostState["players"]
           const p = players.find((x) => x.id === b.id);
           return p ? <g key={b.id} transform={`translate(${b.x},${b.y})`}><Lingo look={p.look} dead /></g> : null;
         })}
+        {sabotage === "lights" && <rect x={0} y={0} width={WORLD.w} height={WORLD.h} fill="#000" opacity={0.55} />}
+        {sabotage === "lights" && <circle cx={FUSE.x} cy={FUSE.y - 46} r={60 + Math.sin(t * 8) * 8} fill="none" stroke="#e23d4f" strokeWidth={8} />}
+        {sabotage === "alarm" && ALARM_PANELS.map((a) => <circle key={a.id} cx={a.x} cy={a.y - 8} r={56 + Math.sin(t * 10) * 8} fill="none" stroke={held.includes(a.id) ? "#7bbf5a" : "#e23d4f"} strokeWidth={8} />)}
         {show && players.map((p) => {
           const q = pos.current[p.id];
-          if (!q) return null;
+          if (!q || q.vent) return null;
           return (
             <g key={p.id} transform={`translate(${q.x},${q.y})`}>
-              <Lingo look={p.look} ghost={!p.alive} dir={q.dir} />
+              <Lingo look={p.look} ghost={!p.alive} dir={q.dir} moving={q.moving} t={t} seed={p.id} />
               <text y={-118} textAnchor="middle" fontSize={22} fontWeight={800} fill="#f2efe6" stroke="#0e1113" strokeWidth={5} paintOrder="stroke">{p.name}</text>
             </g>
           );
@@ -340,7 +398,7 @@ function HostMap({ players, pos, bodies, show }: { players: HostState["players"]
   );
 }
 
-export function MeetingBoard({ pub, lang, me, onVote, myVote }: { pub: ReturnType<typeof E.publicState>; lang: "en" | "es"; me?: string; onVote?: (id: string) => void; myVote?: string }) {
+export function MeetingBoard({ pub, lang, me, onVote, myVote, big }: { pub: ReturnType<typeof E.publicState>; lang: "en" | "es"; me?: string; onVote?: (id: string) => void; myVote?: string; big?: boolean }) {
   const T = g(lang);
   const m = pub.meeting!;
   const tally: Record<string, number> = {};
@@ -348,7 +406,7 @@ export function MeetingBoard({ pub, lang, me, onVote, myVote }: { pub: ReturnTyp
   const canVote = !!onVote && m.stage === "vote" && !myVote && pub.players.find((p) => p.id === me)?.alive;
   return (
     <div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(min(200px,100%),1fr))", gap: 10 }}>
+      <div style={{ display: "grid", gridTemplateColumns: `repeat(auto-fill,minmax(min(${big ? 250 : 200}px,100%),1fr))`, gap: 10 }}>
         {pub.players.map((p) => {
           const clue = m.clues[p.id];
           const voted = m.voted.indexOf(p.id) !== -1;
@@ -358,19 +416,35 @@ export function MeetingBoard({ pub, lang, me, onVote, myVote }: { pub: ReturnTyp
             <button key={p.id} type="button" disabled={!clickable && !!onVote} onClick={() => clickable && onVote!(p.id)}
               style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", border: "3px solid #0e1113", borderRadius: 5, textAlign: "left", color: "#f2efe6", opacity: p.alive ? 1 : 0.45, cursor: clickable ? "pointer" : "default",
                 background: myVote === p.id ? "#7d2f16" : "linear-gradient(#3b4349,#2b3236)", boxShadow: "0 4px 0 #0e1113", position: "relative" }}>
-              <LingoBadge look={p.look} size={44} ghost={!p.alive} />
+              <LingoBadge look={p.look} size={big ? 58 : 44} ghost={!p.alive} seed={p.id} scared={m.stage === "result" && votes > 0} />
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 800, fontSize: 16 }}>{p.name}{p.id === me ? (lang === "es" ? " (tú)" : " (you)") : ""}</div>
-                <div style={{ font: "700 15px 'Space Mono',monospace", color: clue ? "#f5c518" : "rgba(242,239,230,0.3)", overflow: "hidden", textOverflow: "ellipsis" }}>{p.alive ? clue || "…" : "☠"}</div>
+                <div style={{ fontWeight: 800, fontSize: big ? 20 : 16, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.teacher ? "🎓 " : ""}{p.name}{p.id === me ? (lang === "es" ? " (tú)" : " (you)") : ""}</div>
+                <div style={{ font: "700 15px 'Space Mono',monospace", color: clue ? "#f5c518" : "rgba(242,239,230,0.3)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.alive ? clue || "…" : "☠"}</div>
+                {m.stage === "result" && votes > 0 && (
+                  <div style={{ display: "flex", gap: 2, flexWrap: "wrap", marginTop: 4 }}>
+                    {Object.entries(m.votes || {}).filter(([, t]) => t === p.id).map(([voter], k) => {
+                      const vp = pub.players.find((x) => x.id === voter);
+                      return vp ? <span key={voter} title={vp.name} style={{ animation: `popIn .3s ${k * 0.15}s both` }}><LingoBadge look={vp.look} size={22} animate={false} /></span> : null;
+                    })}
+                  </div>
+                )}
               </div>
               {m.stage === "vote" && voted && <span style={{ font: "700 10px 'Space Mono',monospace", padding: "3px 6px", border: "2px solid #0e1113", borderRadius: 3, background: "#7bbf5a", color: "#0e1113" }}>✓</span>}
-              {m.stage === "result" && <span style={{ font: "400 22px 'Archivo Black',sans-serif", color: votes ? "#f07a1a" : "rgba(242,239,230,0.3)" }}>{votes}</span>}
+              {m.stage === "result" && <span style={{ font: "400 24px 'Archivo Black',sans-serif", color: votes ? "#f07a1a" : "rgba(242,239,230,0.3)", flex: "none" }}>{votes}</span>}
             </button>
           );
         })}
       </div>
       {m.stage === "vote" && <div style={{ marginTop: 12, fontSize: 15, color: "rgba(242,239,230,0.6)" }}>{m.voted.length} / {pub.players.filter((p) => p.alive).length} {T.voted}</div>}
-      {m.stage === "result" && <div style={{ marginTop: 12, font: "700 15px 'Space Mono',monospace", color: "rgba(242,239,230,0.7)" }}>{T.skipVote}: {tally.skip || 0}</div>}
+      {m.stage === "result" && (
+        <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 6, font: "700 15px 'Space Mono',monospace", color: "rgba(242,239,230,0.7)" }}>
+          {T.skipVote}: {tally.skip || 0}
+          {Object.entries(m.votes || {}).filter(([, t]) => t === "skip").map(([voter]) => {
+            const vp = pub.players.find((x) => x.id === voter);
+            return vp ? <LingoBadge key={voter} look={vp.look} size={22} animate={false} /> : null;
+          })}
+        </div>
+      )}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { BELL, WORLD, doors, furniture, halls, rooms, stations, type Furniture } from "./map";
+import { ALARM_PANELS, BELL, FUSE, WORLD, doors, furniture, halls, rooms, stations, vents, type Furniture } from "./map";
 
 const K = "#0e1113";
 
@@ -119,6 +119,19 @@ function Piece({ f }: { f: Furniture }) {
   }
 }
 
+export function VentArt({ x, y, open = 0 }: { x: number; y: number; open?: number }) {
+  return (
+    <g transform={`translate(${x},${y})`}>
+      <ellipse cx={0} cy={4} rx={34} ry={12} fill="rgba(0,0,0,0.35)" />
+      <rect x={-30} y={-14} width={60} height={28} rx={5} fill="#1b2023" stroke={K} strokeWidth={4} />
+      <g transform={`translate(0 ${-open * 18}) rotate(${-open * 12})`}>
+        <rect x={-30} y={-14} width={60} height={28} rx={5} fill="#8b969c" stroke={K} strokeWidth={4} />
+        {[-18, -6, 6, 18].map((gx) => <rect key={gx} x={gx - 3} y={-9} width={6} height={18} rx={2} fill="#3b4349" />)}
+      </g>
+    </g>
+  );
+}
+
 /* static floor plan — rendered once */
 export const MapStatic = memo(function MapStatic({ labels = true }: { labels?: boolean }) {
   return (
@@ -149,6 +162,20 @@ export const MapStatic = memo(function MapStatic({ labels = true }: { labels?: b
         <g key={s.id}>
           <circle cx={s.x} cy={s.y} r={22} fill="#1b2023" stroke={K} strokeWidth={4} />
           <circle cx={s.x} cy={s.y} r={14} fill="none" stroke="#6d787e" strokeWidth={3} strokeDasharray="5 4" />
+        </g>
+      ))}
+      {vents.map((v) => <VentArt key={v.id} x={v.x} y={v.y} />)}
+      <g transform={`translate(${FUSE.x},${FUSE.y - 46})`}>
+        <rect x={-34} y={-14} width={68} height={50} rx={4} fill="#4a5359" stroke={K} strokeWidth={4} />
+        <rect x={-26} y={-6} width={52} height={10} fill="url(#hazard)" stroke={K} strokeWidth={2} />
+        {[-18, -6, 6, 18].map((x) => <rect key={x} x={x - 3} y={10} width={6} height={16} rx={2} fill="#1b2023" stroke={K} strokeWidth={1.5} />)}
+        <text y={-20} textAnchor="middle" fontSize={13} fontFamily="'Space Mono',monospace" fontWeight={700} fill="#f5c518">⚡ FUSE BOX</text>
+      </g>
+      {ALARM_PANELS.map((a) => (
+        <g key={a.id} transform={`translate(${a.x},${a.y})`}>
+          <rect x={-26} y={-30} width={52} height={44} rx={5} fill="#b4441f" stroke={K} strokeWidth={4} />
+          <circle cx={0} cy={-8} r={11} fill="#e23d4f" stroke={K} strokeWidth={3} />
+          <text y={-38} textAnchor="middle" fontSize={13} fontFamily="'Space Mono',monospace" fontWeight={700} fill="#f07a1a">ALARM {a.id}</text>
         </g>
       ))}
       {labels && rooms.map((r) => (

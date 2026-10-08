@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import * as E from "./engine";
-import { BELL, RANGE, WORLD, dist, spawnPoint, stations, walkable } from "./map";
-import type { HostState, Look } from "./types";
+import { ALARM_PANELS, BELL, FUSE, RANGE, WORLD, dist, lineOfSight, spawnPoint, stations, vents, walkable } from "./map";
+import type { HostState, Look, Pos } from "./types";
 
 const look: Look = { color: 0, hat: "none", face: "none", extra: "none" };
 
@@ -12,7 +12,7 @@ function game(n = 5): HostState {
   E.tick(s, 1000 + E.REVEAL_MS);
   return s;
 }
-const near = (s: HostState) => Object.fromEntries(s.players.map((p) => [p.id, { x: 500, y: 620, dir: 1, moving: false }]));
+const near = (s: HostState): Record<string, Pos> => Object.fromEntries(s.players.map((p) => [p.id, { x: 500, y: 620, dir: 1, moving: false }]));
 
 describe("engine", () => {
   it("starts with one impostor, tasks and a secret word", () => {
@@ -99,6 +99,98 @@ describe("engine", () => {
     expect(s.phase).toBe("meeting");
   });
 
+  it("killer snaps onto the victim and the victim learns who did it", () => {
+    const s = game(5);
+    const imp = s.players.find((p) => p.role === "impostor")!;
+    const victim = s.players.find((p) => p.role === "crew")!;
+    const pos = near(s);
+    pos[victim.id] = { x: 560, y: 620, dir: 1, moving: false };
+    const t = imp.killReadyAt + 1;
+    const outs = E.kill(s, imp.id, victim.id, pos, t);
+    expect(outs.find((o) => o.to === imp.id && o.msg.k === "teleport")).toMatchObject({ msg: { x: 560, y: 620 } });
+    expect(outs.find((o) => o.to === victim.id)).toMatchObject({ msg: { k: "killed", by: imp.id } });
+    expect(E.publicState(s, t + 100).lastKill).toBeTruthy();
+  });
+
+  it("cannot kill from inside a vent", () => {
+    const s = game(5);
+    const imp = s.players.find((p) => p.role === "impostor")!;
+    const victim = s.players.find((p) => p.role === "crew")!;
+    const pos = near(s);
+    pos[imp.id] = { ...pos[imp.id], vent: "v-kids" };
+    expect(E.kill(s, imp.id, victim.id, pos, imp.killReadyAt + 1)).toHaveLength(0);
+    expect(victim.alive).toBe(true);
+  });
+
+  it("lights sabotage is fixed at the fuse box and blocks the bell", () => {
+    const s = game(5);
+    const imp = s.players.find((p) => p.role === "impostor")!;
+    const crew = s.players.find((p) => p.role === "crew")!;
+    E.sabotage(s, imp.id, "lights", s.sabotageReadyAt - 1);
+    expect(s.sabotage).toBeNull();
+    E.sabotage(s, crew.id, "lights", s.sabotageReadyAt + 1);
+    expect(s.sabotage).toBeNull();
+    const t = s.sabotageReadyAt + 1;
+    E.sabotage(s, imp.id, "lights", t);
+    expect(s.sabotage?.kind).toBe("lights");
+    const bellPos = { [crew.id]: { x: BELL.x, y: BELL.y + 90, dir: 1, moving: false } };
+    E.emergency(s, crew.id, bellPos, t + E.EMERGENCY_GRACE_MS + 60000);
+    expect(s.phase).toBe("play");
+    E.fixLights(s, crew.id, { [crew.id]: { x: 300, y: 300, dir: 1, moving: false } }, t + 10);
+    expect(s.sabotage).not.toBeNull();
+    E.fixLights(s, crew.id, { [crew.id]: { x: FUSE.x, y: FUSE.y, dir: 1, moving: false } }, t + 20);
+    expect(s.sabotage).toBeNull();
+    expect(s.sabotageReadyAt).toBe(t + 20 + E.SABOTAGE_COOLDOWN_MS);
+  });
+
+  it("fire alarm needs both panels held at once, otherwise impostors win", () => {
+    const s = game(5);
+    const imp = s.players.find((p) => p.role === "impostor")!;
+    const [a, b] = s.players.filter((p) => p.role === "crew");
+    const t = s.sabotageReadyAt + 1;
+    E.sabotage(s, imp.id, "alarm", t);
+    const pos = { [a.id]: { x: ALARM_PANELS[0].x, y: ALARM_PANELS[0].y, dir: 1, moving: false }, [b.id]: { x: ALARM_PANELS[1].x, y: ALARM_PANELS[1].y, dir: 1, moving: false } };
+    E.hold(s, a.id, "A", true, pos, t + 5);
+    expect(s.sabotage).not.toBeNull();
+    E.hold(s, a.id, "A", false, pos, t + 6);
+    E.hold(s, b.id, "B", true, pos, t + 7);
+    expect(s.sabotage).not.toBeNull();
+    E.hold(s, a.id, "A", true, pos, t + 8);
+    expect(s.sabotage).toBeNull();
+
+    const s2 = game(5);
+    const imp2 = s2.players.find((p) => p.role === "impostor")!;
+    const t2 = s2.sabotageReadyAt + 1;
+    E.sabotage(s2, imp2.id, "alarm", t2);
+    E.tick(s2, t2 + E.ALARM_MS + 1, {});
+    expect(s2.phase).toBe("end");
+    expect(s2.winner).toBe("impostor");
+    expect(s2.winReason).toBe("alarm");
+  });
+
+  it("meetings clear sabotage and collect chat from living players only", () => {
+    const s = game(5);
+    const imp = s.players.find((p) => p.role === "impostor")!;
+    E.sabotage(s, imp.id, "lights", s.sabotageReadyAt + 1);
+    E.teacherMeeting(s, s.sabotageReadyAt + 2);
+    expect(s.sabotage).toBeNull();
+    const [a, b] = s.players;
+    b.alive = false;
+    E.chat(s, a.id, "I suspect   Luis.", 1);
+    E.chat(s, a.id, "spam", 2);
+    E.chat(s, b.id, "boo", 3);
+    expect(s.meeting!.chat.map((c) => c.text)).toEqual(["I suspect Luis."]);
+  });
+
+  it("teacher can join as a regular player", () => {
+    const s = E.createState("ABCD");
+    E.hello(s, "t1", "Teacher", look, true);
+    for (let i = 0; i < 3; i++) E.hello(s, "p" + i, "S" + i, look);
+    E.startGame(s, 0);
+    expect(s.players.find((p) => p.id === "t1")!.teacher).toBe(true);
+    expect(E.publicState(s, 0).players.find((p) => p.id === "t1")!.teacher).toBe(true);
+  });
+
   it("does not leak roles in the public state", () => {
     const s = game(5);
     const pub = E.publicState(s, 0);
@@ -139,6 +231,21 @@ describe("map", () => {
 
   it.each(stations.map((s) => [s.id, s] as const))("station %s is reachable", (_id, st) => {
     expect(reachableNear(st, RANGE.use - 15)).toBe(true);
+  });
+
+  it.each(vents.map((v) => [v.id, v] as const))("vent %s sits on walkable floor and links both ways", (_id, v) => {
+    expect(walkable(v.x, v.y + 2), v.id).toBe(true);
+    v.links.forEach((l) => expect(vents.find((x) => x.id === l)!.links).toContain(v.id));
+  });
+
+  it("sabotage repair points are reachable", () => {
+    expect(reachableNear(FUSE, RANGE.fix - 15)).toBe(true);
+    ALARM_PANELS.forEach((a) => expect(reachableNear(a, RANGE.fix - 15)).toBe(true));
+  });
+
+  it("walls block line of sight but doors don't", () => {
+    expect(lineOfSight({ x: 350, y: 300 }, { x: 350, y: 620 })).toBe(true);
+    expect(lineOfSight({ x: 200, y: 300 }, { x: 200, y: 620 })).toBe(false);
   });
 
   it("emergency bell is reachable", () => {

@@ -16,6 +16,8 @@ export interface Pos {
   /* facing: -1 left, 1 right */
   dir: number;
   moving: boolean;
+  /* id of the vent an impostor is hiding in */
+  vent?: string;
 }
 
 export interface Settings {
@@ -28,6 +30,9 @@ export interface Settings {
   voteSecs: number;
   impostorSees: "decoy" | "hint";
   emergencies: number;
+  sabotage: boolean;
+  vents: boolean;
+  chat: "quick" | "free";
 }
 
 export const defaultSettings: Settings = {
@@ -39,7 +44,10 @@ export const defaultSettings: Settings = {
   clueSecs: 40,
   voteSecs: 40,
   impostorSees: "decoy",
-  emergencies: 1
+  emergencies: 1,
+  sabotage: true,
+  vents: true,
+  chat: "quick"
 };
 
 export interface PlayerState {
@@ -54,6 +62,7 @@ export interface PlayerState {
   emergencyLeft: number;
   killReadyAt: number; // host clock ms
   score: number;
+  teacher: boolean;
 }
 
 export interface Body {
@@ -72,6 +81,17 @@ export interface Meeting {
   endsAt: number;
   clues: Record<string, string>;
   votes: Record<string, string>; // voter -> target id | "skip"
+  chat: ChatLine[];
+}
+
+export interface ChatLine { id: string; text: string; at: number }
+
+export type SabotageKind = "lights" | "alarm";
+export interface Sabotage {
+  kind: SabotageKind;
+  startedAt: number;
+  endsAt: number; // alarm only; 0 for lights
+  holds: Record<string, string[]>; // alarm panel id -> holders
 }
 
 export interface Eject {
@@ -97,6 +117,10 @@ export interface HostState {
   prevImpostors: string[];
   usedWords: string[];
   log: string[];
+  sabotage: Sabotage | null;
+  sabotageReadyAt: number;
+  /* last kill, for the impact effect on phones */
+  lastKill: { x: number; y: number; at: number; victim: string } | null;
 }
 
 /* ---------- wire messages ---------- */
@@ -109,6 +133,7 @@ export interface PublicPlayer {
   alive: boolean;
   connected: boolean;
   score: number;
+  teacher: boolean;
   /* revealed only when the game has ended or the player was ejected */
   role?: Role;
 }
@@ -129,6 +154,8 @@ export interface PublicState {
   round: number;
   word?: string;
   decoy?: string;
+  sabotage: { kind: SabotageKind; msLeft: number; held: string[] } | null;
+  lastKill: { x: number; y: number; ago: number; victim: string } | null;
 }
 
 /* private message sent to one player */
@@ -141,24 +168,33 @@ export interface Secret {
   done: string[];
   killMsLeft: number;
   emergencyLeft: number;
+  sabotageMsLeft: number;
 }
 
 export type ToHost =
-  | { k: "hello"; name: string; look: Look }
+  | { k: "hello"; name: string; look: Look; teacher?: boolean }
   | { k: "look"; name: string; look: Look }
   | { k: "kill"; target: string }
   | { k: "report"; body: string }
   | { k: "emergency" }
   | { k: "task"; station: string }
   | { k: "clue"; text: string }
-  | { k: "vote"; target: string };
+  | { k: "vote"; target: string }
+  | { k: "chat"; text: string }
+  | { k: "sabotage"; kind: SabotageKind }
+  | { k: "fixLights" }
+  | { k: "hold"; panel: string; on: boolean };
 
 export type FromHost =
   | { k: "state"; s: PublicState }
   | { k: "secret"; s: Secret }
   | { k: "teleport"; x: number; y: number }
-  | { k: "killed" }
+  | { k: "killed"; by?: string }
   | { k: "toast"; text: string };
 
 /* players broadcast their position straight to everyone (host included) */
-export type PosMsg = { k: "pos"; x: number; y: number; dir: number; m: boolean };
+export type PosMsg = { k: "pos"; x: number; y: number; dir: number; m: boolean; v?: string };
+
+/* cosmetic broadcasts between phones */
+export type EmoteMsg = { k: "emote"; e: string };
+export type VentFx = { k: "ventfx"; x: number; y: number };

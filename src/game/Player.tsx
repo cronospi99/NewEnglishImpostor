@@ -1,42 +1,57 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Relay, makeId, type NetStatus } from "./net";
-import type { FromHost, Look, PosMsg, PublicState, Secret, ToHost } from "./types";
+import type { EmoteMsg, FromHost, Look, PosMsg, PublicState, Secret, ToHost, VentFx } from "./types";
 import { g, type GStrings } from "./i18n";
 import { COLORS, EXTRAS, FACES, HATS, LABELS, Lingo, LingoBadge, randomLook } from "./Character";
-import { MapDefs, MapStatic } from "./MapView";
-import { BELL, RANGE, SPEED, VISION, WORLD, dist, moveWithin, roomAt, rooms, spawnPoint, stations, type Station } from "./map";
+import { MapDefs, MapStatic, VentArt } from "./MapView";
+import {
+  ALARM_PANELS, BELL, FUSE, RANGE, SPEED, VISION, WORLD, dist, ghostMove, lineOfSight, moveWithin, roomAt, rooms,
+  sightPolygon, spawnPoint, stations, vents, type Station
+} from "./map";
 import { MissionPanel } from "./MissionPanel";
 import { Center, Countdown, EjectScene, EndScreen, MeetingBoard, TaskBar } from "./Host";
+import { ChatFeed, KillScreen, MeetingSplash, SoundToggle } from "./ui";
+import { sfx, startSiren, stopSiren, unlockAudio } from "./sfx";
 import { load, save } from "../shared/storage";
 import type { Lang } from "../shared/proximity";
 
-type Other = { x: number; y: number; dir: number; m: boolean; dx: number; dy: number; at: number };
+type Other = { x: number; y: number; dir: number; m: boolean; dx: number; dy: number; at: number; v?: string };
+type Fx = { x: number; y: number; at: number };
+export const EMOTES = ["👋", "😱", "🤔", "👍", "😂", "❗"];
 
 export function Player({ code, onExit }: { code: string; onExit: () => void }) {
+  const teacher = useMemo(() => new URLSearchParams(location.search).get("teacher") === "1", []);
   const id = useMemo(() => {
-    const k = "impostor.pid." + code;
+    const k = "impostor.pid." + code + (teacher ? ".t" : "");
     let v = load<string>(k, "");
-    if (!v) { v = "p-" + makeId(); save(k, v); }
+    if (!v) { v = (teacher ? "t-" : "p-") + makeId(); save(k, v); }
     return v;
-  }, [code]);
-  const saved = load<{ name: string; look: Look } | null>("impostor.profile", null);
-  const [name, setName] = useState(saved?.name || "");
-  const [look, setLook] = useState<Look>(saved?.look || randomLook());
+  }, [code, teacher]);
+  const profileKey = teacher ? "impostor.profile.teacher" : "impostor.profile";
+  const saved = load<{ name: string; look: Look } | null>(profileKey, null);
+  const [name, setName] = useState(saved?.name || (teacher ? "Teacher" : ""));
+  const [look, setLook] = useState<Look>(saved?.look || (teacher ? { color: 0, hat: "gradcap", face: "glasses", extra: "lanyard" } : randomLook()));
   const [joined, setJoined] = useState(false);
   const [editing, setEditing] = useState(false);
   const [net, setNet] = useState<NetStatus>("connecting");
   const [pub, setPub] = useState<(PublicState & { at: number }) | null>(null);
   const [secret, setSecret] = useState<(Secret & { at: number }) | null>(null);
   const [toast, setToast] = useState("");
-  const [flash, setFlash] = useState(false);
+  const [killedBy, setKilledBy] = useState<string | null>(null);
+  const [splash, setSplash] = useState<{ reason: string; caller: string; victim?: string } | null>(null);
   const relay = useRef<Relay | null>(null);
   const others = useRef<Record<string, Other>>({});
-  const mine = useRef({ x: spawnPoint(0, 1).x, y: spawnPoint(0, 1).y, dir: 1, m: false });
+  const emotes = useRef<Record<string, { e: string; at: number }>>({});
+  const ventFx = useRef<Fx[]>([]);
+  const shake = useRef(0);
+  const mine = useRef({ x: spawnPoint(0, 1).x, y: spawnPoint(0, 1).y, dir: 1, m: false, v: undefined as string | undefined });
   if (import.meta.env.DEV) (window as any).__impostor = { mine, others };
-  const profile = useRef({ name, look });
-  profile.current = { name, look };
+  const profile = useRef({ name, look, teacher });
+  profile.current = { name, look, teacher };
   const lang: Lang = pub?.settings.lang || (navigator.language?.startsWith("es") ? "es" : "en");
   const T = g(lang);
+  const pubRef = useRef(pub);
+  pubRef.current = pub;
 
   const send = useCallback((m: ToHost) => relay.current?.send(m, "host"), []);
 
@@ -54,61 +69,114 @@ export function Player({ code, onExit }: { code: string; onExit: () => void }) {
         if (env.d?.type === "peer-leave") delete others.current[env.d.id];
         return;
       }
-      const m = env.d as FromHost | PosMsg;
+      const m = env.d as FromHost | PosMsg | EmoteMsg | VentFx;
       if (!m) return;
       if (m.k === "pos") {
         const o = others.current[env.f];
-        others.current[env.f] = { x: m.x, y: m.y, dir: m.dir, m: m.m, dx: o ? o.dx : m.x, dy: o ? o.dy : m.y, at: performance.now() };
+        const jump = !o || Math.hypot(o.x - m.x, o.y - m.y) > 300;
+        others.current[env.f] = { x: m.x, y: m.y, dir: m.dir, m: m.m, v: m.v, dx: jump ? m.x : o.dx, dy: jump ? m.y : o.dy, at: performance.now() };
         return;
       }
+      if (m.k === "emote") { emotes.current[env.f] = { e: String(m.e).slice(0, 4), at: performance.now() }; return; }
+      if (m.k === "ventfx") { ventFx.current.push({ x: m.x, y: m.y, at: performance.now() }); return; }
       const now = Date.now();
       if (m.k === "state") setPub({ ...m.s, at: now });
       if (m.k === "secret") setSecret({ ...m.s, at: now });
-      if (m.k === "teleport") { mine.current.x = m.x; mine.current.y = m.y; }
-      if (m.k === "killed") { setFlash(true); setTimeout(() => setFlash(false), 2600); }
+      if (m.k === "teleport") {
+        const wasPlay = pubRef.current?.phase === "play";
+        mine.current.x = m.x; mine.current.y = m.y; mine.current.v = undefined;
+        if (wasPlay) { shake.current = performance.now(); sfx.kill(); }
+      }
+      if (m.k === "killed") {
+        if (pubRef.current?.phase === "play") { setKilledBy(m.by || ""); sfx.killed(); setTimeout(() => setKilledBy(null), 3200); }
+      }
       if (m.k === "toast") { setToast(m.text); setTimeout(() => setToast(""), 3500); }
     });
     return () => { off(); offS(); r.close(); };
   }, [joined, code, id]);
 
+  /* phase transitions → splash screens and sounds */
+  const phaseKey = pub ? pub.phase + (pub.meeting ? ":" + pub.meeting.reason + pub.meeting.caller : "") : "";
+  useEffect(() => {
+    if (!pub) return;
+    if (pub.phase === "meeting" && pub.meeting && pub.meeting.stage === "clues") {
+      setSplash({ reason: pub.meeting.reason, caller: pub.meeting.caller, victim: pub.meeting.victim });
+      if (pub.meeting.reason === "report") sfx.report(); else sfx.meeting();
+      const t = setTimeout(() => setSplash(null), 2600);
+      return () => clearTimeout(t);
+    }
+    if (pub.phase === "eject") sfx.eject();
+    if (pub.phase === "end") {
+      const myRole = pub.players.find((p) => p.id === id)?.role;
+      if (pub.winner && myRole === pub.winner) sfx.win(); else sfx.lose();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phaseKey]);
+
+  useEffect(() => {
+    if (pub?.phase === "reveal" && secret) sfx.reveal(secret.role === "impostor");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pub?.phase === "reveal" && !!secret]);
+
+  /* sabotage alarm sound */
+  const alarmOn = pub?.phase === "play" && pub.sabotage?.kind === "alarm";
+  const lightsOn = pub?.phase === "play" && pub.sabotage?.kind === "lights";
+  useEffect(() => {
+    if (alarmOn) { sfx.sabotage(); startSiren(); return () => stopSiren(); }
+  }, [alarmOn]);
+  const prevSab = useRef(false);
+  useEffect(() => {
+    const active = !!(alarmOn || lightsOn);
+    if (lightsOn) sfx.sabotage();
+    if (prevSab.current && !active && pub?.phase === "play") sfx.fixed();
+    prevSab.current = active;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [alarmOn, lightsOn]);
+
   const saveProfile = () => {
-    save("impostor.profile", { name, look });
+    unlockAudio();
+    save(profileKey, { name, look });
     if (joined) send({ k: "look", name, look });
     setJoined(true);
     setEditing(false);
   };
 
   if (!joined || editing) {
-    return <Customize T={T} lang={lang} code={code} name={name} setName={setName} look={look} setLook={setLook} onSave={saveProfile} joined={joined} onExit={onExit} />;
+    return <Customize T={T} lang={lang} code={code} name={name} setName={setName} look={look} setLook={setLook} onSave={saveProfile} joined={joined} onExit={onExit} teacher={teacher} />;
   }
 
   const meP = pub?.players.find((p) => p.id === id);
   const toastText = toast ? (T as Record<string, string>)[toast] || toast : "";
+  const killer = killedBy ? pub?.players.find((p) => p.id === killedBy) : undefined;
 
   return (
     <div className="page" style={{ minHeight: "100dvh" }}>
       {net !== "open" && <Banner text={net === "closed" ? T.replaced : T.offline} />}
       {toastText && <Banner text={toastText} color="#f07a1a" />}
-      {flash && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 80, background: "rgba(180,68,31,0.85)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14, animation: "popIn .3s" }}>
-          <LingoBadge look={look} dead size={110} />
-          <div style={{ font: "400 34px 'Archivo Black',sans-serif", textTransform: "uppercase", textShadow: "3px 3px 0 #0e1113", textAlign: "center" }}>{T.killedYou}</div>
-        </div>
-      )}
+      {killedBy !== null && <KillScreen T={T} victim={look} killer={killer} />}
+      {splash && pub && <MeetingSplash T={T} pub={pub} {...splash} />}
 
       {!pub || pub.phase === "lobby" ? (
         <Center>
           <div className="kicker">{T.academy}</div>
-          <div style={{ animation: "bob 1.6s ease-in-out infinite" }}><LingoBadge look={look} size={140} /></div>
-          <div style={{ font: "400 30px 'Archivo Black',sans-serif", textTransform: "uppercase", textShadow: "3px 3px 0 #0e1113" }}>{name}</div>
+          <LingoBadge look={look} size={140} seed={id} happy />
+          <div style={{ font: "400 30px 'Archivo Black',sans-serif", textTransform: "uppercase", textShadow: "3px 3px 0 #0e1113" }}>{teacher ? "🎓 " : ""}{name}</div>
           <p className="lead" style={{ textAlign: "center" }}>{pub ? T.ready : T.connecting}</p>
-          {pub && <div className="tag" style={{ color: "#f5c518" }}>{pub.players.length} {T.players}</div>}
-          <button type="button" className="btn btn-s" onClick={() => setEditing(true)}>{T.customize}</button>
+          {pub && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 4, justifyContent: "center", maxWidth: 360 }}>
+              {pub.players.filter((p) => p.id !== id).map((p) => <LingoBadge key={p.id} look={p.look} size={34} seed={p.id} />)}
+            </div>
+          )}
+          <div style={{ display: "flex", gap: 8 }}>
+            <button type="button" className="btn btn-s" onClick={() => setEditing(true)}>{T.customize}</button>
+            <SoundToggle T={T} />
+          </div>
         </Center>
       ) : pub.phase === "reveal" ? (
-        <RoleCard T={T} secret={secret} pub={pub} />
+        <RoleCard T={T} secret={secret} pub={pub} me={id} />
       ) : pub.phase === "play" ? (
-        <PlayView key={pub.round} T={T} lang={lang} me={id} pub={pub} secret={secret} relay={relay} others={others} mine={mine} send={send} alive={!!meP?.alive} />
+        <PlayView key={pub.round} T={T} lang={lang} me={id} pub={pub} secret={secret} relay={relay} others={others} mine={mine} send={send}
+          alive={!!meP?.alive} emotes={emotes} ventFx={ventFx} shake={shake} />
       ) : pub.phase === "meeting" ? (
         <MeetingPhone T={T} lang={lang} me={id} pub={pub} secret={secret} send={send} />
       ) : pub.phase === "eject" ? (
@@ -124,11 +192,11 @@ function Banner({ text, color = "#b4441f" }: { text: string; color?: string }) {
   return <div style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 90, padding: "8px 12px", background: color, color: "#0e1113", borderBottom: "3px solid #0e1113", font: "700 13px 'Space Mono',monospace", textAlign: "center" }}>{text}</div>;
 }
 
-function Customize({ T, lang, code, name, setName, look, setLook, onSave, joined, onExit }: { T: GStrings; lang: Lang; code: string; name: string; setName: (s: string) => void; look: Look; setLook: (l: Look) => void; onSave: () => void; joined: boolean; onExit: () => void }) {
+function Customize({ T, lang, code, name, setName, look, setLook, onSave, joined, onExit, teacher }: { T: GStrings; lang: Lang; code: string; name: string; setName: (s: string) => void; look: Look; setLook: (l: Look) => void; onSave: () => void; joined: boolean; onExit: () => void; teacher: boolean }) {
   const chip = (key: "hat" | "face" | "extra", list: readonly string[]) => (
     <div className="row" style={{ gap: 6 }}>
       {list.map((v) => (
-        <button key={v} type="button" className={"opt " + (look[key] === v ? "on" : "off")} style={{ padding: "7px 10px", fontSize: 12, letterSpacing: 0, textTransform: "none" }} onClick={() => setLook({ ...look, [key]: v })}>{LABELS[v]?.[lang] || v}</button>
+        <button key={v} type="button" className={"opt " + (look[key] === v ? "on" : "off")} style={{ padding: "7px 10px", fontSize: 12, letterSpacing: 0, textTransform: "none" }} onClick={() => { setLook({ ...look, [key]: v }); sfx.pop(); }}>{LABELS[v]?.[lang] || v}</button>
       ))}
     </div>
   );
@@ -137,24 +205,24 @@ function Customize({ T, lang, code, name, setName, look, setLook, onSave, joined
       <div className="hdr">
         <div className="hdr-row">
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}><div className="hdr-logo">?</div><div className="hdr-title">Impostor</div></div>
-          <span className="tag" style={{ color: "#f5c518" }}>{T.code} {code}</span>
+          <span className="tag" style={{ color: "#f5c518" }}>{teacher ? "🎓 " + T.teacherBadge + " · " : ""}{T.code} {code}</span>
         </div>
         <div className="hazard" />
       </div>
       <div style={{ padding: "18px 16px 28px", display: "flex", flexDirection: "column", gap: 16, maxWidth: 560, width: "100%", margin: "0 auto" }}>
         <div className="lbl lbl-y">{T.customize}</div>
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <div className="well" style={{ padding: 10, background: "radial-gradient(circle at 50% 70%,#3b4349,#1b2023)" }}><LingoBadge look={look} size={110} /></div>
+          <div className="well" style={{ padding: 10, background: "radial-gradient(circle at 50% 70%,#3b4349,#1b2023)" }}><LingoBadge look={look} size={110} happy /></div>
           <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 10 }}>
             <input className="field" value={name} maxLength={14} placeholder={T.yourName} onChange={(e) => setName(e.target.value)} autoFocus={!name} />
-            <button type="button" className="btn btn-o btn-sm" onClick={() => setLook(randomLook())}>🎲 {lang === "es" ? "Aleatorio" : "Random"}</button>
+            <button type="button" className="btn btn-o btn-sm" onClick={() => { setLook(randomLook()); sfx.pop(); }}>🎲 {lang === "es" ? "Aleatorio" : "Random"}</button>
           </div>
         </div>
         <div>
           <div className="lbl" style={{ marginBottom: 8 }}>{T.color}</div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(8,1fr)", gap: 6 }}>
             {COLORS.map((c, i) => (
-              <button key={c.name} type="button" title={c.name} onClick={() => setLook({ ...look, color: i })}
+              <button key={c.name} type="button" title={c.name} onClick={() => { setLook({ ...look, color: i }); sfx.pop(); }}
                 style={{ aspectRatio: "1", border: "3px solid #0e1113", borderRadius: 6, background: c.c, cursor: "pointer", boxShadow: look.color === i ? "0 0 0 3px #f5c518" : "0 3px 0 #0e1113" }} />
             ))}
           </div>
@@ -171,12 +239,17 @@ function Customize({ T, lang, code, name, setName, look, setLook, onSave, joined
   );
 }
 
-function RoleCard({ T, secret, pub }: { T: GStrings; secret: Secret | null; pub: PublicState }) {
+function RoleCard({ T, secret, pub, me }: { T: GStrings; secret: Secret | null; pub: PublicState; me: string }) {
   if (!secret) return <Center><p className="lead">{T.connecting}</p></Center>;
   const imp = secret.role === "impostor";
   const partners = pub.players.filter((p) => secret.partners.indexOf(p.id) !== -1);
+  const mine = pub.players.find((p) => p.id === me);
   return (
     <Center>
+      <div style={{ display: "flex", gap: 6, alignItems: "flex-end", animation: "popIn .5s" }}>
+        {mine && <LingoBadge look={mine.look} size={96} seed={me} scared={imp} happy={!imp} />}
+        {partners.map((p) => <LingoBadge key={p.id} look={p.look} size={70} seed={p.id} />)}
+      </div>
       <div style={{ width: "min(520px,100%)", border: "4px solid #0e1113", borderRadius: 8, background: imp ? "#7d2f16" : "#2b3236", boxShadow: "0 8px 0 #0e1113", overflow: "hidden", animation: "popIn .4s" }}>
         <div style={{ height: 12, backgroundImage: `repeating-linear-gradient(45deg,${imp ? "#f07a1a" : "#f5c518"} 0 11px,#0e1113 11px 22px)` }} />
         <div style={{ padding: "22px 20px", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
@@ -195,10 +268,27 @@ function RoleCard({ T, secret, pub }: { T: GStrings; secret: Secret | null; pub:
   );
 }
 
+/* ---------------- meeting on the phone: clue, chat/accuse, vote ---------------- */
+
+const PHRASES: { en: string; needs?: "p" | "r" }[] = [
+  { en: "I suspect {p}.", needs: "p" },
+  { en: "{p} is acting sus!", needs: "p" },
+  { en: "I saw {p} near the body.", needs: "p" },
+  { en: "{p} was with me.", needs: "p" },
+  { en: "{p} is safe.", needs: "p" },
+  { en: "Where were you, {p}?", needs: "p" },
+  { en: "I was in the {r}.", needs: "r" },
+  { en: "Who called the meeting?" },
+  { en: "I didn't see anything." },
+  { en: "Let's skip this vote." }
+];
+
 function MeetingPhone({ T, lang, me, pub, secret, send }: { T: GStrings; lang: Lang; me: string; pub: PublicState & { at: number }; secret: Secret | null; send: (m: ToHost) => void }) {
   const m = pub.meeting!;
   const [clue, setClue] = useState("");
   const [now, setNow] = useState(Date.now());
+  const [pending, setPending] = useState<typeof PHRASES[number] | null>(null);
+  const [free, setFree] = useState("");
   useEffect(() => { const iv = setInterval(() => setNow(Date.now()), 250); return () => clearInterval(iv); }, []);
   const alive = !!pub.players.find((p) => p.id === me)?.alive;
   const sent = m.clues[me];
@@ -206,6 +296,9 @@ function MeetingPhone({ T, lang, me, pub, secret, send }: { T: GStrings; lang: L
   const [localVote, setLocalVote] = useState<string | undefined>();
   const msLeft = Math.max(0, m.msLeft - (now - pub.at));
   const imp = secret?.role === "impostor";
+  const say = (text: string) => { send({ k: "chat", text }); sfx.pop(); setPending(null); };
+  const pickPhrase = (ph: typeof PHRASES[number]) => (ph.needs ? setPending(ph) : say(ph.en));
+
   return (
     <div style={{ padding: "16px 14px 28px", display: "flex", flexDirection: "column", gap: 14 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
@@ -216,39 +309,86 @@ function MeetingPhone({ T, lang, me, pub, secret, send }: { T: GStrings; lang: L
       <h2 className="h2" style={{ fontSize: 24, margin: 0 }}>{m.stage === "clues" ? (imp ? T.clueStageImp : T.clueStage) : m.stage === "vote" ? T.voteStage : T.result}</h2>
       {m.stage === "clues" && alive && (
         sent ? <div className="tag" style={{ color: "#7bbf5a", fontSize: 14, alignSelf: "flex-start" }}>{T.sent} “{sent}”</div> : (
-          <form onSubmit={(e) => { e.preventDefault(); if (clue.trim()) send({ k: "clue", text: clue.trim() }); }} style={{ display: "flex", gap: 8 }}>
-            <input className="field" value={clue} maxLength={24} placeholder={T.typeClue} onChange={(e) => setClue(e.target.value.replace(/\s+/g, " "))} autoFocus />
+          <form onSubmit={(e) => { e.preventDefault(); if (clue.trim()) { send({ k: "clue", text: clue.trim() }); sfx.pop(); } }} style={{ display: "flex", gap: 8 }}>
+            <input className="field" value={clue} maxLength={24} placeholder={T.typeClue} onChange={(e) => setClue(e.target.value.replace(/\s+/g, " "))} />
             <button type="submit" className="btn btn-y" disabled={!clue.trim()}>{T.send}</button>
           </form>
         )
       )}
       {!alive && <div className="tag" style={{ alignSelf: "flex-start" }}>{T.ghost}</div>}
-      <MeetingBoard pub={pub} lang={lang} me={me} myVote={localVote || myVote} onVote={alive ? (t) => { setLocalVote(t); send({ k: "vote", target: t }); } : undefined} />
+      <MeetingBoard pub={pub} lang={lang} me={me} myVote={localVote || myVote} onVote={alive ? (t) => { setLocalVote(t); send({ k: "vote", target: t }); sfx.vote(); } : undefined} />
       {m.stage === "vote" && alive && !myVote && !localVote && (
-        <button type="button" className="btn btn-s" onClick={() => { setLocalVote("skip"); send({ k: "vote", target: "skip" }); }}>{T.skipVote}</button>
+        <button type="button" className="btn btn-s" onClick={() => { setLocalVote("skip"); send({ k: "vote", target: "skip" }); sfx.vote(); }}>{T.skipVote}</button>
       )}
+
+      <div className="plate" style={{ padding: "12px 12px 14px" }}>
+        <div className="lbl lbl-y" style={{ marginBottom: 8 }}>💬 {T.chat}</div>
+        <ChatFeed pub={pub} me={me} max={8} />
+        {alive && m.stage !== "result" && (
+          <div style={{ marginTop: 10 }}>
+            {pending ? (
+              <div>
+                <div className="lbl" style={{ marginBottom: 6 }}>{pending.needs === "p" ? T.pickPlayer : T.pickRoom}</div>
+                <div className="row" style={{ gap: 6 }}>
+                  {pending.needs === "p"
+                    ? pub.players.filter((p) => p.id !== me && p.alive).map((p) => (
+                      <button key={p.id} type="button" className="opt off" style={{ padding: "6px 10px", fontSize: 13, textTransform: "none", letterSpacing: 0 }} onClick={() => say(pending.en.replace("{p}", p.name))}>{p.name}</button>
+                    ))
+                    : rooms.map((r) => (
+                      <button key={r.id} type="button" className="opt off" style={{ padding: "6px 10px", fontSize: 13, textTransform: "none", letterSpacing: 0 }} onClick={() => say(pending.en.replace("{r}", r.en))}>{r.en}</button>
+                    ))}
+                  <button type="button" className="opt off" style={{ padding: "6px 10px", fontSize: 13 }} onClick={() => setPending(null)}>✕</button>
+                </div>
+              </div>
+            ) : (
+              <div className="row" style={{ gap: 6 }}>
+                {PHRASES.map((ph) => (
+                  <button key={ph.en} type="button" className="opt off" style={{ padding: "6px 10px", fontSize: 13, textTransform: "none", letterSpacing: 0 }} onClick={() => pickPhrase(ph)}>
+                    {ph.en.replace("{p}", "…").replace("{r}", "…")}
+                  </button>
+                ))}
+              </div>
+            )}
+            {pub.settings.chat === "free" && (
+              <form onSubmit={(e) => { e.preventDefault(); if (free.trim()) { say(free.trim()); setFree(""); } }} style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                <input className="field" value={free} maxLength={80} placeholder={T.chatPh} onChange={(e) => setFree(e.target.value)} style={{ fontSize: 15, padding: "9px 10px" }} />
+                <button type="submit" className="btn btn-y btn-sm" disabled={!free.trim()}>{T.sendChat}</button>
+              </form>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
-/* ------------------------------------------------------------------ */
+/* ---------------- the game world on the phone ---------------- */
 
-function PlayView({ T, lang, me, pub, secret, relay, others, mine, send, alive }: {
+function PlayView({ T, lang, me, pub, secret, relay, others, mine, send, alive, emotes, ventFx, shake }: {
   T: GStrings; lang: Lang; me: string; pub: PublicState & { at: number }; secret: (Secret & { at: number }) | null;
   relay: React.MutableRefObject<Relay | null>; others: React.MutableRefObject<Record<string, Other>>;
-  mine: React.MutableRefObject<{ x: number; y: number; dir: number; m: boolean }>; send: (m: ToHost) => void; alive: boolean;
+  mine: React.MutableRefObject<{ x: number; y: number; dir: number; m: boolean; v?: string }>; send: (m: ToHost) => void; alive: boolean;
+  emotes: React.MutableRefObject<Record<string, { e: string; at: number }>>; ventFx: React.MutableRefObject<Fx[]>; shake: React.MutableRefObject<number>;
 }) {
   const [, setFrame] = useState(0);
   const [panel, setPanel] = useState<Station | null>(null);
+  const [fuse, setFuse] = useState(false);
   const [showMap, setShowMap] = useState(false);
   const [showList, setShowList] = useState(true);
+  const [showEmotes, setShowEmotes] = useState(false);
+  const [showSab, setShowSab] = useState(false);
   const [done, setDone] = useState<string[]>([]);
+  const [holding, setHolding] = useState<string | null>(null);
   const [size, setSize] = useState({ w: window.innerWidth, h: window.innerHeight });
   const joy = useRef<{ ox: number; oy: number; x: number; y: number; id: number } | null>(null);
   const keys = useRef<Record<string, boolean>>({});
   const panelRef = useRef(false);
-  panelRef.current = !!panel || showMap;
-  const tRef = useRef(0);
+  panelRef.current = !!panel || showMap || fuse || !!mine.current.v;
+  const ghostRef = useRef(!alive);
+  ghostRef.current = !alive;
+  const tRef = useRef(performance.now() / 1000);
+  const dust = useRef<(Fx & { r: number })[]>([]);
+  const lastDust = useRef<Record<string, number>>({});
 
   useEffect(() => {
     const onR = () => setSize({ w: window.innerWidth, h: window.innerHeight });
@@ -261,6 +401,11 @@ function PlayView({ T, lang, me, pub, secret, relay, others, mine, send, alive }
     (navigator as any).wakeLock?.request("screen").then((l: any) => { lock = l; }).catch(() => {});
     return () => { window.removeEventListener("resize", onR); window.removeEventListener("keydown", kd); window.removeEventListener("keyup", ku); lock?.release().catch(() => {}); };
   }, []);
+
+  const sendPos = useCallback(() => {
+    const p = mine.current;
+    relay.current?.send({ k: "pos", x: Math.round(p.x), y: Math.round(p.y), dir: p.dir, m: p.m, v: p.v } satisfies PosMsg, undefined, true);
+  }, [mine, relay]);
 
   useEffect(() => {
     let raf = 0, last = performance.now(), lastSend = 0, wasMoving = false;
@@ -282,54 +427,83 @@ function PlayView({ T, lang, me, pub, secret, relay, others, mine, send, alive }
       const mag = Math.hypot(vx, vy);
       const p = mine.current;
       if (mag > 0.05) {
+        /* constant top speed like the original: no inertia, instant stop */
         const n = Math.min(1, mag);
         const nx = (vx / mag) * n * SPEED * dt, ny = (vy / mag) * n * SPEED * dt;
-        const r = moveWithin(p.x, p.y, nx, ny);
+        const r = ghostRef.current ? ghostMove(p.x, p.y, nx, ny) : moveWithin(p.x, p.y, nx, ny);
+        p.m = r.x !== p.x || r.y !== p.y;
         p.x = r.x; p.y = r.y;
         if (Math.abs(vx) > 0.1) p.dir = vx > 0 ? 1 : -1;
-        p.m = true;
       } else p.m = false;
-      if ((p.m && t - lastSend > 90) || (wasMoving && !p.m) || t - lastSend > 1000) {
-        relay.current?.send({ k: "pos", x: Math.round(p.x), y: Math.round(p.y), dir: p.dir, m: p.m } satisfies PosMsg, undefined, true);
-        lastSend = t;
-      }
+      if ((p.m && t - lastSend > 90) || (wasMoving && !p.m) || t - lastSend > 1000) { sendPos(); lastSend = t; }
       wasMoving = p.m;
       const f = 1 - Math.exp(-dt * 12);
       Object.values(others.current).forEach((o) => { o.dx += (o.x - o.dx) * f; o.dy += (o.y - o.dy) * f; });
+      /* footstep dust */
+      const addDust = (key: string, x: number, y: number) => {
+        if (t - (lastDust.current[key] || 0) < 120) return;
+        lastDust.current[key] = t;
+        dust.current.push({ x: x + (Math.random() - 0.5) * 16, y: y - 2, at: t, r: 5 + Math.random() * 4 });
+      };
+      if (p.m && !ghostRef.current) addDust("me", p.x, p.y);
+      Object.entries(others.current).forEach(([oid, o]) => { if (o.m && !o.v) addDust(oid, o.dx, o.dy); });
+      dust.current = dust.current.filter((d) => t - d.at < 520);
+      ventFx.current = ventFx.current.filter((v) => t - v.at < 700);
       setFrame((x) => (x + 1) % 1000000);
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, [mine, others, relay]);
+  }, [mine, others, sendPos, ventFx]);
 
   const p = mine.current;
   const ghost = !alive;
   const imp = secret?.role === "impostor";
-  const vision = imp ? VISION.impostor : VISION.crew;
+  const lights = pub.sabotage?.kind === "lights";
+  const alarm = pub.sabotage?.kind === "alarm";
+  const vision = imp ? VISION.impostor : VISION.crew * (lights ? VISION.lightsOut : 1);
   const portrait = size.h >= size.w;
   const vw = portrait ? 760 : Math.min(1500, 700 * (size.w / size.h));
   const vh = portrait ? Math.min(1500, 760 * (size.h / size.w)) : 700;
   const nowMs = Date.now();
+  const tNow = tRef.current;
+  const eye = { x: p.x, y: p.y - 30 };
+  const sight = ghost ? "" : sightPolygon(eye.x, eye.y, vision);
+  const canSee = (q: { x: number; y: number }) => ghost || (dist(eye, q) < vision + 30 && lineOfSight(eye, { x: q.x, y: q.y - 30 }));
+
   const doneSet = new Set([...(secret?.done || []), ...done]);
   const myTasks = (secret?.tasks || []).map((sid) => stations.find((s) => s.id === sid)!).filter(Boolean);
   const todo = myTasks.filter((s) => !doneSet.has(s.id));
-  const nearStation = todo.find((s) => dist(p, s) < RANGE.use);
-  const nearBell = !ghost && (secret?.emergencyLeft || 0) > 0 && dist(p, BELL) < RANGE.bell;
-  const bodies = pub.bodies.filter((b) => ghost || dist(p, b) < vision + 60);
-  const nearBody = !ghost ? bodies.find((b) => dist(p, b) < RANGE.report) : undefined;
+  const inVent = p.v ? vents.find((v) => v.id === p.v) : undefined;
+  const nearStation = !inVent ? todo.find((s) => dist(p, s) < RANGE.use) : undefined;
+  const nearBell = !ghost && !inVent && (secret?.emergencyLeft || 0) > 0 && dist(p, BELL) < RANGE.bell;
+  const nearFuse = !ghost && lights && dist(p, FUSE) < RANGE.fix;
+  const nearPanel = !ghost && alarm ? ALARM_PANELS.find((a) => dist(p, a) < RANGE.fix) : undefined;
+  const nearVent = imp && alive && pub.settings.vents && !inVent ? vents.find((v) => dist(p, v) < RANGE.vent) : undefined;
+  const bodies = pub.bodies.filter((b) => canSee(b));
+  const nearBody = !ghost && !inVent ? bodies.find((b) => dist(p, b) < RANGE.report) : undefined;
   const killMs = secret ? Math.max(0, secret.killMsLeft - (nowMs - secret.at)) : 0;
+  const sabMs = secret ? Math.max(0, secret.sabotageMsLeft - (nowMs - secret.at)) : 0;
   const visible = pub.players.filter((q) => {
     if (q.id === me || !q.connected) return false;
     const o = others.current[q.id];
-    if (!o) return false;
+    if (!o || o.v) return false;
     if (!q.alive && !ghost) return false;
-    return ghost || dist(p, { x: o.dx, y: o.dy }) < vision + 60;
+    return canSee({ x: o.dx, y: o.dy });
   });
-  const killTarget = imp && alive && killMs === 0
+  const killTarget = imp && alive && killMs === 0 && !inVent
     ? visible.filter((q) => q.alive && secret!.partners.indexOf(q.id) === -1).map((q) => ({ q, d: dist(p, { x: others.current[q.id].dx, y: others.current[q.id].dy }) })).filter((x) => x.d < RANGE.kill).sort((a, b) => a.d - b.d)[0]?.q
     : undefined;
   const room = roomAt(p.x, p.y);
+  const lk = pub.lastKill;
+  const killFxAge = lk ? (nowMs - (pub.at - lk.ago)) / 1000 : 99;
+  const shakeAge = (performance.now() - shake.current) / 1000;
+  const sh = shakeAge < 0.35 ? Math.sin(shakeAge * 90) * 10 * (1 - shakeAge / 0.35) : 0;
+
+  /* release a held alarm panel when walking away */
+  useEffect(() => {
+    if (holding && (!nearPanel || nearPanel.id !== holding)) { send({ k: "hold", panel: holding, on: false }); setHolding(null); }
+  }, [holding, nearPanel, send]);
 
   const onDown = (e: React.PointerEvent) => {
     if ((e.target as HTMLElement).closest("button")) return;
@@ -340,52 +514,105 @@ function PlayView({ T, lang, me, pub, secret, relay, others, mine, send, alive }
   const onUp = (e: React.PointerEvent) => { if (joy.current?.id === e.pointerId) joy.current = null; };
 
   const use = () => {
-    if (nearStation) setPanel(nearStation);
+    if (nearFuse) setFuse(true);
+    else if (nearStation) setPanel(nearStation);
     else if (nearBell) send({ k: "emergency" });
+  };
+  const ventTo = (vid: string | undefined) => {
+    const v = vents.find((x) => x.id === (vid || p.v));
+    if (!v) return;
+    relay.current?.send({ k: "ventfx", x: v.x, y: v.y } satisfies VentFx, undefined, true);
+    ventFx.current.push({ x: v.x, y: v.y, at: performance.now() });
+    p.x = v.x; p.y = v.y + 2;
+    p.v = vid;
+    sfx.vent();
+    sendPos();
+  };
+  const emote = (e: string) => {
+    relay.current?.send({ k: "emote", e } satisfies EmoteMsg, undefined, true);
+    emotes.current[me] = { e, at: performance.now() };
+    setShowEmotes(false);
+    sfx.pop();
+  };
+
+  const useLabel = nearFuse ? T.fix : nearBell && !nearStation ? T.bell : T.use;
+  const useIcon = nearFuse ? "🔧" : nearBell && !nearStation ? "🔔" : "✋";
+  const meP = pub.players.find((x) => x.id === me);
+
+  const drawChar = (q: PublicState["players"][number], x: number, y: number, dir: number, moving: boolean) => {
+    const partner = imp && secret!.partners.indexOf(q.id) !== -1;
+    const em = emotes.current[q.id];
+    const emAge = em ? (performance.now() - em.at) / 1000 : 99;
+    const isKiller = q.id === me && shakeAge < 0.6;
+    return (
+      <g key={q.id} transform={`translate(${x},${y})`}>
+        <Lingo look={q.look} dir={dir} moving={moving} ghost={!q.alive} t={tNow} seed={q.id} happy={isKiller} />
+        <text y={-124} textAnchor="middle" fontSize={20} fontWeight={800} fill={partner || (q.id === me && imp) ? "#ff5a5a" : "#f2efe6"} stroke="#0e1113" strokeWidth={5} paintOrder="stroke">
+          {q.teacher ? "🎓 " : ""}{q.name}
+        </text>
+        {killTarget?.id === q.id && <circle r={48} cy={-44} fill="none" stroke="#e23d4f" strokeWidth={4} strokeDasharray="8 6" style={{ transformOrigin: "0 -44px", animation: "spin 3s linear infinite" }} />}
+        {emAge < 2.6 && (
+          <g transform={`translate(0 ${-160 - Math.min(1, emAge * 4) * 10}) scale(${Math.min(1, emAge * 5)})`} opacity={emAge > 2.2 ? (2.6 - emAge) / 0.4 : 1}>
+            <rect x={-30} y={-30} width={60} height={50} rx={14} fill="#f2efe6" stroke="#0e1113" strokeWidth={4} />
+            <path d="M -8 18 L 0 30 L 8 18" fill="#f2efe6" stroke="#0e1113" strokeWidth={4} strokeLinejoin="round" />
+            <text y={8} textAnchor="middle" fontSize={30}>{em!.e}</text>
+          </g>
+        )}
+      </g>
+    );
   };
 
   return (
     <div style={{ position: "fixed", inset: 0, touchAction: "none", userSelect: "none", WebkitUserSelect: "none", overflow: "hidden", background: "#141a1d" }}
       onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
-      <svg viewBox={`${p.x - vw / 2} ${p.y - vh / 2 - 40} ${vw} ${vh}`} preserveAspectRatio="xMidYMid slice" style={{ width: "100%", height: "100%", display: "block" }}>
+      <svg viewBox={`${p.x - vw / 2 + sh} ${p.y - vh / 2 - 40} ${vw} ${vh}`} preserveAspectRatio="xMidYMid slice" style={{ width: "100%", height: "100%", display: "block" }}>
         <MapDefs />
         <defs>
-          <radialGradient id="fogGrad">
-            <stop offset="0.72" stopColor="#000" />
+          <radialGradient id="fogGrad" gradientUnits="userSpaceOnUse" cx={eye.x} cy={eye.y} r={vision}>
+            <stop offset="0.7" stopColor="#000" />
             <stop offset="1" stopColor="#fff" />
           </radialGradient>
           <mask id="fog" maskUnits="userSpaceOnUse" x={p.x - 3000} y={p.y - 3000} width={6000} height={6000}>
             <rect x={p.x - 3000} y={p.y - 3000} width={6000} height={6000} fill="#fff" />
-            <circle cx={p.x} cy={p.y - 40} r={vision} fill="url(#fogGrad)" />
+            {sight && <polygon points={sight} fill="url(#fogGrad)" />}
           </mask>
         </defs>
         <MapStatic />
+        {pub.settings.vents && imp && vents.map((v) => <VentArt key={v.id + "o"} x={v.x} y={v.y} open={inVent?.id === v.id ? 1 : 0} />)}
+        {ventFx.current.map((v, i) => {
+          const a = (tNow * 1000 - v.at) / 1000;
+          return <g key={"vf" + i}><VentArt x={v.x} y={v.y} open={Math.sin(Math.min(1, a / 0.6) * Math.PI)} /></g>;
+        })}
         {todo.map((s) => (
           <g key={s.id} transform={`translate(${s.x},${s.y})`}>
-            <circle r={30} fill="none" stroke="#f5c518" strokeWidth={5} style={{ animation: "blink 1.2s infinite" }} />
-            <text y={-36} textAnchor="middle" fontSize={34} fontFamily="'Archivo Black',sans-serif" fill="#f5c518" stroke="#0e1113" strokeWidth={5} paintOrder="stroke">!</text>
+            <circle r={30 + Math.sin(tNow * 5) * 3} fill="none" stroke="#f5c518" strokeWidth={5} />
+            <text y={-36 + Math.sin(tNow * 4) * 4} textAnchor="middle" fontSize={34} fontFamily="'Archivo Black',sans-serif" fill="#f5c518" stroke="#0e1113" strokeWidth={5} paintOrder="stroke">!</text>
           </g>
         ))}
+        {lights && <circle cx={FUSE.x} cy={FUSE.y - 46} r={50 + Math.sin(tNow * 8) * 6} fill="none" stroke="#e23d4f" strokeWidth={6} />}
+        {alarm && ALARM_PANELS.map((a) => <circle key={a.id} cx={a.x} cy={a.y - 8} r={44 + Math.sin(tNow * 10) * 6} fill="none" stroke={pub.sabotage!.held.includes(a.id) ? "#7bbf5a" : "#e23d4f"} strokeWidth={6} />)}
+        {dust.current.map((d, i) => {
+          const a = (tNow * 1000 - d.at) / 520;
+          return <circle key={"d" + i} cx={d.x} cy={d.y - a * 8} r={d.r + a * 8} fill="#d9d4c4" opacity={0.45 * (1 - a)} />;
+        })}
         {bodies.map((b) => {
           const who = pub.players.find((q) => q.id === b.id);
-          return who ? <g key={b.id} transform={`translate(${b.x},${b.y})`}><Lingo look={who.look} dead /></g> : null;
+          return who ? <g key={b.id} transform={`translate(${b.x},${b.y})`}><Lingo look={who.look} dead t={tNow} seed={who.id} /></g> : null;
         })}
-        {[...visible.map((q) => ({ q, o: others.current[q.id] })), { q: pub.players.find((x) => x.id === me)!, o: null as Other | null }]
-          .filter((x) => x.q)
-          .sort((a, b) => (a.o ? a.o.dy : p.y) - (b.o ? b.o.dy : p.y))
-          .map(({ q, o }) => {
-            const x = o ? o.dx : p.x, y = o ? o.dy : p.y;
-            const partner = imp && secret!.partners.indexOf(q.id) !== -1;
-            return (
-              <g key={q.id} transform={`translate(${x},${y})`}>
-                <Lingo look={q.look} dir={o ? o.dir : p.dir} moving={o ? o.m : p.m} ghost={!q.alive} t={tRef.current} />
-                <text y={-122} textAnchor="middle" fontSize={20} fontWeight={800} fill={partner ? "#f07a1a" : "#f2efe6"} stroke="#0e1113" strokeWidth={5} paintOrder="stroke">{q.name}</text>
-                {killTarget?.id === q.id && <circle r={46} cy={-44} fill="none" stroke="#e23d4f" strokeWidth={4} strokeDasharray="8 6" />}
-              </g>
-            );
-          })}
-        {!ghost && <rect x={p.x - 3000} y={p.y - 3000} width={6000} height={6000} fill="#0b0e10" opacity={0.92} mask="url(#fog)" />}
+        {lk && killFxAge < 1.4 && canSee(lk) && (
+          <g transform={`translate(${lk.x},${lk.y - 50}) scale(${0.6 + Math.min(1, killFxAge * 4) * 0.8})`} opacity={1 - killFxAge / 1.4}>
+            <path d="M 0 -70 L 16 -24 L 66 -30 L 26 4 L 50 50 L 4 24 L -36 60 L -24 12 L -70 -6 L -22 -22 Z" fill="#f5c518" stroke="#0e1113" strokeWidth={6} strokeLinejoin="round" />
+            <text y={14} textAnchor="middle" fontSize={34} fontFamily="'Archivo Black',sans-serif" fill="#e23d4f" stroke="#0e1113" strokeWidth={3} paintOrder="stroke">ZAP!</text>
+          </g>
+        )}
+        {[...visible.map((q) => ({ q, x: others.current[q.id].dx, y: others.current[q.id].dy, dir: others.current[q.id].dir, m: others.current[q.id].m })),
+          ...(meP && !inVent ? [{ q: meP, x: p.x, y: p.y, dir: p.dir, m: p.m }] : [])]
+          .sort((a, b) => a.y - b.y)
+          .map(({ q, x, y, dir, m }) => drawChar(q, x, y, dir, m))}
+        {!ghost && <rect x={p.x - 3000} y={p.y - 3000} width={6000} height={6000} fill={lights ? "#05070a" : "#0b0e10"} opacity={0.93} mask="url(#fog)" />}
       </svg>
+
+      {alarm && <div style={{ position: "absolute", inset: 0, pointerEvents: "none", boxShadow: `inset 0 0 ${60 + Math.sin(tNow * 8) * 30}px rgba(226,61,79,0.75)` }} />}
 
       {/* HUD */}
       <div style={{ position: "absolute", top: 8, left: 8, right: 8, display: "flex", gap: 8, alignItems: "flex-start", pointerEvents: "none" }}>
@@ -394,8 +621,13 @@ function PlayView({ T, lang, me, pub, secret, relay, others, mine, send, alive }
         </div>
         {room && <span className="tag" style={{ color: room.accent, background: "#1b2023ee", flex: "none" }}>{room.en}</span>}
       </div>
-      <div style={{ position: "absolute", top: 62, left: 8, maxWidth: "62vw" }}>
-        <button type="button" className="tag" onClick={() => setShowList((v) => !v)} style={{ color: imp ? "#f07a1a" : "#f5c518", cursor: "pointer" }}>
+      {(lights || alarm) && (
+        <div style={{ position: "absolute", top: 60, left: "50%", transform: "translateX(-50%)", width: "min(92vw,460px)", padding: "8px 12px", border: "3px solid #0e1113", borderRadius: 5, background: "#b4441f", color: "#fff3e0", font: "700 13px 'Space Mono',monospace", textAlign: "center", animation: "blink 1s infinite", zIndex: 5 }}>
+          {alarm ? `🚨 ${Math.ceil((pub.sabotage!.msLeft - (nowMs - pub.at)) / 1000)}s — ${T.alarmMsg}` : `💡 ${T.lightsMsg}`}
+        </div>
+      )}
+      <div style={{ position: "absolute", top: (lights || alarm) ? 122 : 62, left: 8, maxWidth: "62vw" }}>
+        <button type="button" className="tag" onClick={() => setShowList((v) => !v)} style={{ color: imp ? "#ff5a5a" : "#f5c518", cursor: "pointer" }}>
           {imp ? "☠ " + T.impostor : T.missions} {showList ? "▾" : "▸"}
         </button>
         {showList && (
@@ -417,19 +649,65 @@ function PlayView({ T, lang, me, pub, secret, relay, others, mine, send, alive }
         </div>
       )}
 
-      <div style={{ position: "absolute", right: 10, bottom: "max(14px, env(safe-area-inset-bottom))", display: "flex", flexDirection: "column", gap: 10, alignItems: "flex-end" }}>
-        {imp && alive && (
-          <ActBtn label={killMs > 0 ? Math.ceil(killMs / 1000) + "s" : T.kill} color="#e23d4f" disabled={!killTarget} onClick={() => killTarget && send({ k: "kill", target: killTarget.id })} icon="⚡" />
-        )}
-        {!ghost && <ActBtn label={T.report} color="#f07a1a" disabled={!nearBody} onClick={() => nearBody && send({ k: "report", body: nearBody.id })} icon="📢" />}
-        <ActBtn label={nearBell && !nearStation ? T.bell : T.use} color="#f5c518" disabled={!nearStation && !nearBell} onClick={use} icon={nearBell && !nearStation ? "🔔" : "✋"} />
-      </div>
-      <div style={{ position: "absolute", left: 10, bottom: "max(14px, env(safe-area-inset-bottom))", display: "flex", gap: 8 }}>
-        <button type="button" className="btn btn-s btn-sm" onClick={() => setShowMap(true)}>🗺 {T.map}</button>
-      </div>
-      <div style={{ position: "absolute", left: 0, right: 0, bottom: 70, textAlign: "center", pointerEvents: "none", font: "700 10px 'Space Mono',monospace", color: "rgba(242,239,230,0.35)" }}>{T.moveHelp}</div>
+      {inVent ? (
+        <div style={{ position: "absolute", left: 0, right: 0, bottom: "max(14px, env(safe-area-inset-bottom))", display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+          <span className="tag" style={{ color: "#f5c518" }}>{T.inVent}</span>
+          <div className="row" style={{ justifyContent: "center" }}>
+            {inVent.links.map((lid) => {
+              const v = vents.find((x) => x.id === lid)!;
+              const r = rooms.find((x) => x.id === v.room)!;
+              const ang = Math.atan2(v.y - inVent.y, v.x - inVent.x) * 180 / Math.PI;
+              return <button key={lid} type="button" className="btn btn-o btn-sm" onClick={() => ventTo(lid)}><span style={{ display: "inline-block", transform: `rotate(${ang}deg)` }}>➜</span> {r.en}</button>;
+            })}
+            <button type="button" className="btn btn-y btn-sm" onClick={() => { const v = inVent; p.v = undefined; relay.current?.send({ k: "ventfx", x: v.x, y: v.y } satisfies VentFx, undefined, true); ventFx.current.push({ x: v.x, y: v.y, at: performance.now() }); p.y = v.y + 2; sfx.vent(); sendPos(); }}>{T.exitVent}</button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div style={{ position: "absolute", right: 10, bottom: "max(14px, env(safe-area-inset-bottom))", display: "flex", flexDirection: "column", gap: 10, alignItems: "flex-end" }}>
+            {imp && pub.settings.sabotage && (
+              <ActBtn label={sabMs > 0 || pub.sabotage ? (pub.sabotage ? "…" : Math.ceil(sabMs / 1000) + "s") : T.sabotage} color="#9b6bd3" disabled={sabMs > 0 || !!pub.sabotage} onClick={() => setShowSab((v) => !v)} icon="🔥" small />
+            )}
+            {nearVent && <ActBtn label={T.vent} color="#8b969c" disabled={false} onClick={() => ventTo(nearVent.id)} icon="🕳" small />}
+            {imp && alive && (
+              <ActBtn label={killMs > 0 ? Math.ceil(killMs / 1000) + "s" : T.kill} color="#e23d4f" disabled={!killTarget} onClick={() => { if (killTarget) { send({ k: "kill", target: killTarget.id }); } }} icon="⚡" />
+            )}
+            {!ghost && <ActBtn label={T.report} color="#f07a1a" disabled={!nearBody} onClick={() => nearBody && send({ k: "report", body: nearBody.id })} icon="📢" />}
+            {nearPanel ? (
+              <button type="button"
+                onPointerDown={() => { setHolding(nearPanel.id); send({ k: "hold", panel: nearPanel.id, on: true }); }}
+                onPointerUp={() => { setHolding(null); send({ k: "hold", panel: nearPanel.id, on: false }); }}
+                onPointerLeave={() => { if (holding) { setHolding(null); send({ k: "hold", panel: nearPanel.id, on: false }); } }}
+                style={{ width: 96, height: 96, borderRadius: "50%", border: "4px solid #0e1113", background: holding ? "#7bbf5a" : "#e23d4f", color: "#0e1113", boxShadow: holding ? "0 1px 0 #0e1113" : "0 5px 0 #0e1113", font: "800 13px Archivo,sans-serif", textTransform: "uppercase", cursor: "pointer", transform: holding ? "translateY(4px)" : "none" }}>
+                ✋<br />{T.hold} {nearPanel.id}
+              </button>
+            ) : (
+              <ActBtn label={useLabel} color="#f5c518" disabled={!nearStation && !nearBell && !nearFuse} onClick={use} icon={useIcon} />
+            )}
+          </div>
+          <div style={{ position: "absolute", left: 10, bottom: "max(14px, env(safe-area-inset-bottom))", display: "flex", gap: 8, alignItems: "flex-end" }}>
+            <button type="button" className="btn btn-s btn-sm" onClick={() => setShowMap(true)}>🗺 {T.map}</button>
+            <button type="button" className="btn btn-s btn-sm" onClick={() => setShowEmotes((v) => !v)}>😀</button>
+          </div>
+          {showEmotes && (
+            <div style={{ position: "absolute", left: 10, bottom: 70, display: "flex", gap: 6, padding: 6, border: "3px solid #0e1113", borderRadius: 8, background: "#1b2023ee", animation: "popIn .2s" }}>
+              {EMOTES.map((e) => <button key={e} type="button" onClick={() => emote(e)} style={{ fontSize: 26, width: 44, height: 44, border: "2px solid #0e1113", borderRadius: 6, background: "#3b4349", cursor: "pointer" }}>{e}</button>)}
+            </div>
+          )}
+          {showSab && !pub.sabotage && sabMs === 0 && (
+            <div style={{ position: "absolute", right: 110, bottom: 120, display: "flex", flexDirection: "column", gap: 8, padding: 10, border: "3px solid #0e1113", borderRadius: 8, background: "#1b2023f0", animation: "popIn .2s" }}>
+              <div className="lbl" style={{ color: "#c9a2ff" }}>{T.sabotage}</div>
+              <button type="button" className="btn btn-s btn-sm" onClick={() => { send({ k: "sabotage", kind: "lights" }); setShowSab(false); }}>💡 {T.lightsOut}</button>
+              <button type="button" className="btn btn-r btn-sm" onClick={() => { send({ k: "sabotage", kind: "alarm" }); setShowSab(false); }}>🚨 {T.fireAlarm}</button>
+            </div>
+          )}
+        </>
+      )}
+      {nearPanel && !inVent && <div style={{ position: "absolute", left: 0, right: 0, bottom: 128, textAlign: "center", pointerEvents: "none" }}><span className="tag" style={{ color: "#fff3e0", background: "#b4441f" }}>{T.holdHelp}</span></div>}
+{!inVent && <div style={{ position: "absolute", left: 0, right: 0, bottom: 70, textAlign: "center", pointerEvents: "none", font: "700 10px 'Space Mono',monospace", color: "rgba(242,239,230,0.35)" }}>{T.moveHelp}</div>}
 
-      {showMap && <MiniMap onClose={() => setShowMap(false)} me={p} todo={todo} T={T} />}
+      {showMap && <MiniMap onClose={() => setShowMap(false)} me={p} todo={todo} T={T} sabotage={pub.sabotage?.kind} />}
+      {fuse && <FusePanel T={T} onClose={() => setFuse(false)} onFixed={() => { send({ k: "fixLights" }); setFuse(false); }} />}
       {panel && (
         <MissionPanel station={panel} level={pub.settings.level} lang={lang} fake={imp}
           onDone={() => { setDone((d) => d.concat(panel.id)); send({ k: "task", station: panel.id }); }}
@@ -441,16 +719,50 @@ function PlayView({ T, lang, me, pub, secret, relay, others, mine, send, alive }
 
 const clamp = (v: number, m: number) => Math.max(-m, Math.min(m, v));
 
-function ActBtn({ label, icon, color, disabled, onClick }: { label: string; icon: string; color: string; disabled: boolean; onClick: () => void }) {
+function ActBtn({ label, icon, color, disabled, onClick, small }: { label: string; icon: string; color: string; disabled: boolean; onClick: () => void; small?: boolean }) {
+  const s = small ? 64 : 84;
   return (
     <button type="button" onClick={onClick} disabled={disabled}
-      style={{ width: 84, height: 84, borderRadius: "50%", border: "4px solid #0e1113", background: color, color: "#0e1113", boxShadow: "0 5px 0 #0e1113", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2, cursor: "pointer", font: "800 12px Archivo,sans-serif", textTransform: "uppercase", opacity: disabled ? 0.4 : 1 }}>
-      <span style={{ fontSize: 26, lineHeight: 1 }}>{icon}</span>{label}
+      style={{ width: s, height: s, borderRadius: "50%", border: "4px solid #0e1113", background: color, color: "#0e1113", boxShadow: "0 5px 0 #0e1113", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2, cursor: "pointer", font: `800 ${small ? 10 : 12}px Archivo,sans-serif`, textTransform: "uppercase", opacity: disabled ? 0.4 : 1 }}>
+      <span style={{ fontSize: small ? 20 : 26, lineHeight: 1 }}>{icon}</span>{label}
     </button>
   );
 }
 
-function MiniMap({ onClose, me, todo, T }: { onClose: () => void; me: { x: number; y: number }; todo: Station[]; T: GStrings }) {
+/* lights sabotage repair: flip every switch up */
+function FusePanel({ T, onClose, onFixed }: { T: GStrings; onClose: () => void; onFixed: () => void }) {
+  const [sw, setSw] = useState(() => {
+    const a = Array.from({ length: 5 }, () => Math.random() < 0.5);
+    if (a.every(Boolean)) a[2] = false;
+    return a;
+  });
+  const fixedRef = useRef(onFixed);
+  fixedRef.current = onFixed;
+  const allOn = sw.every(Boolean);
+  useEffect(() => {
+    if (allOn) { const t = setTimeout(() => fixedRef.current(), 350); return () => clearTimeout(t); }
+  }, [allOn]);
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 50, background: "rgba(14,17,19,0.8)", display: "flex", alignItems: "center", justifyContent: "center", padding: 12 }}>
+      <div className="plate" style={{ width: "min(420px,100%)", animation: "popIn .2s" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+          <div><div className="lbl lbl-y">⚡ {FUSE.label}</div><div style={{ fontSize: 14, color: "rgba(242,239,230,0.7)" }}>{T.fuseHelp}</div></div>
+          <button type="button" className="sq btn-s" onClick={onClose}>✕</button>
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-around", padding: "14px 6px", border: "3px solid #0e1113", borderRadius: 6, background: "#1b2023" }}>
+          {sw.map((on, i) => (
+            <button key={i} type="button" onClick={() => { setSw((a) => a.map((x, k) => (k === i ? !x : x))); sfx.step(); }}
+              style={{ width: 44, height: 100, border: "3px solid #0e1113", borderRadius: 6, background: "#3b4349", position: "relative", cursor: "pointer" }}>
+              <span style={{ position: "absolute", left: 4, right: 4, height: 40, top: on ? 6 : 48, borderRadius: 4, border: "3px solid #0e1113", background: on ? "#7bbf5a" : "#e23d4f", transition: "top .12s" }} />
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MiniMap({ onClose, me, todo, T, sabotage }: { onClose: () => void; me: { x: number; y: number }; todo: Station[]; T: GStrings; sabotage?: string }) {
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 40, background: "rgba(14,17,19,0.9)", display: "flex", flexDirection: "column", padding: 10, gap: 8 }} onPointerDown={(e) => e.stopPropagation()}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -461,7 +773,9 @@ function MiniMap({ onClose, me, todo, T }: { onClose: () => void; me: { x: numbe
         <MapDefs />
         <MapStatic />
         {todo.map((s) => <circle key={s.id} cx={s.x} cy={s.y} r={34} fill="#f5c518" stroke="#0e1113" strokeWidth={6} style={{ animation: "blink 1s infinite" }} />)}
-        <circle cx={me.x} cy={me.y - 30} r={40} fill="#e23d4f" stroke="#fff" strokeWidth={8} />
+        {sabotage === "lights" && <circle cx={FUSE.x} cy={FUSE.y - 40} r={46} fill="#e23d4f" stroke="#fff" strokeWidth={6} style={{ animation: "blink .6s infinite" }} />}
+        {sabotage === "alarm" && ALARM_PANELS.map((a) => <circle key={a.id} cx={a.x} cy={a.y} r={46} fill="#e23d4f" stroke="#fff" strokeWidth={6} style={{ animation: "blink .6s infinite" }} />)}
+        <circle cx={me.x} cy={me.y - 30} r={40} fill="#3fa7d6" stroke="#fff" strokeWidth={8} />
       </svg>
     </div>
   );

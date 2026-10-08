@@ -2,7 +2,7 @@
    messages that the host should deliver to specific players. */
 import { pickImpostors, shuffle, randInt } from "../shared/random";
 import { wordPool } from "../shared/pool";
-import { BELL, RANGE, dist, spawnPoint, stations } from "./map";
+import { ALARM_PANELS, BELL, FUSE, RANGE, dist, spawnPoint, stations } from "./map";
 import {
   defaultSettings, type FromHost, type HostState, type Look, type PlayerState, type Pos, type PublicState, type Role, type Secret
 } from "./types";
@@ -15,12 +15,15 @@ export const RESULT_MS = 4500;
 export const EJECT_MS = 6500;
 export const START_COOLDOWN_MS = 12000;
 export const EMERGENCY_GRACE_MS = 15000;
+export const ALARM_MS = 45000;
+export const SABOTAGE_COOLDOWN_MS = 30000;
+export const FIRST_SABOTAGE_MS = 20000;
 
 export function createState(code: string): HostState {
   return {
     code, phase: "lobby", settings: { ...defaultSettings }, players: [], bodies: [], entry: null,
     meeting: null, eject: null, winner: null, winReason: "", phaseEndsAt: 0, round: 0,
-    prevImpostors: [], usedWords: [], log: []
+    prevImpostors: [], usedWords: [], log: [], sabotage: null, sabotageReadyAt: 0, lastKill: null
   };
 }
 
@@ -28,25 +31,25 @@ const P = (s: HostState, id: string) => s.players.find((p) => p.id === id);
 const sanitizeName = (n: string) => String(n || "").replace(/\s+/g, " ").trim().slice(0, 14) || "Student";
 const sanitizeLook = (l: Look): Look => ({ color: Math.max(0, Math.min(15, Number(l?.color) || 0)), hat: String(l?.hat || "none").slice(0, 20), face: String(l?.face || "none").slice(0, 20), extra: String(l?.extra || "none").slice(0, 20) });
 
-export function hello(s: HostState, id: string, name: string, look: Look): Out[] {
+export function hello(s: HostState, id: string, name: string, look: Look, teacher = false): Out[] {
   const p = P(s, id);
   if (p) {
     p.connected = true;
-    if (s.phase === "lobby") { p.name = sanitizeName(name); p.look = sanitizeLook(look); }
+    if (s.phase === "lobby") { p.name = sanitizeName(name); p.look = sanitizeLook(look); p.teacher = !!teacher; }
     return [];
   }
   if (s.phase !== "lobby") {
     /* late joiners watch as ghosts until the next game */
-    s.players.push(newPlayer(id, name, look, false));
+    s.players.push(newPlayer(id, name, look, false, teacher));
     return [{ to: id, msg: { k: "toast", text: "late" } }];
   }
   if (s.players.length >= 20) return [{ to: id, msg: { k: "toast", text: "full" } }];
-  s.players.push(newPlayer(id, name, look, true));
+  s.players.push(newPlayer(id, name, look, true, teacher));
   return [];
 }
 
-function newPlayer(id: string, name: string, look: Look, alive: boolean): PlayerState {
-  return { id, name: sanitizeName(name), look: sanitizeLook(look), connected: true, alive, role: "crew", tasks: [], done: [], emergencyLeft: 0, killReadyAt: 0, score: 0 };
+function newPlayer(id: string, name: string, look: Look, alive: boolean, teacher: boolean): PlayerState {
+  return { id, name: sanitizeName(name), look: sanitizeLook(look), connected: true, alive, role: "crew", tasks: [], done: [], emergencyLeft: 0, killReadyAt: 0, score: 0, teacher: !!teacher };
 }
 
 export function setLook(s: HostState, id: string, name: string, look: Look) {
@@ -90,6 +93,9 @@ export function startGame(s: HostState, now: number): Out[] {
   s.winner = null;
   s.winReason = "";
   s.log = [];
+  s.sabotage = null;
+  s.sabotageReadyAt = now + REVEAL_MS + FIRST_SABOTAGE_MS;
+  s.lastKill = null;
   const nTasks = Math.max(1, Math.min(stations.length, st.tasksPerPlayer));
   s.players.forEach((p) => {
     p.alive = true;
@@ -124,7 +130,8 @@ export function secretFor(s: HostState, id: string, now: number): Secret {
     tasks: p.tasks,
     done: p.done,
     killMsLeft: Math.max(0, p.killReadyAt - now),
-    emergencyLeft: p.emergencyLeft
+    emergencyLeft: p.emergencyLeft,
+    sabotageMsLeft: Math.max(0, s.sabotageReadyAt - now)
   };
 }
 
@@ -139,12 +146,20 @@ export function kill(s: HostState, killerId: string, targetId: string, pos: Posi
   if (!k || !t || !k.alive || !t.alive || k.role !== "impostor" || t.role === "impostor") return [];
   if (now < k.killReadyAt) return [];
   const kp = pos[killerId], tp = pos[targetId];
-  if (!kp || !tp || dist(kp, tp) > RANGE.kill + 60) return [];
+  if (!kp || !tp || kp.vent || tp.vent || dist(kp, tp) > RANGE.kill + 60) return [];
   t.alive = false;
-  s.bodies.push({ id: t.id, x: Math.round(tp.x), y: Math.round(tp.y) });
+  const bx = Math.round(tp.x), by = Math.round(tp.y);
+  s.bodies.push({ id: t.id, x: bx, y: by });
+  s.lastKill = { x: bx, y: by, at: now, victim: t.id };
   k.killReadyAt = now + s.settings.killCooldown * 1000;
   s.log.push(`${k.name} eliminated ${t.name}`);
-  const out: Out[] = [{ to: t.id, msg: { k: "killed" } }, { to: k.id, msg: { k: "secret", s: secretFor(s, k.id, now) } }];
+  /* like the original: the killer snaps onto the victim's spot */
+  kp.x = bx; kp.y = by;
+  const out: Out[] = [
+    { to: t.id, msg: { k: "killed", by: k.id } },
+    { to: k.id, msg: { k: "teleport", x: bx, y: by } },
+    { to: k.id, msg: { k: "secret", s: secretFor(s, k.id, now) } }
+  ];
   checkWin(s, now);
   return out;
 }
@@ -161,6 +176,7 @@ export function emergency(s: HostState, caller: string, pos: Positions, now: num
   if (s.phase !== "play") return [];
   const c = P(s, caller), cp = pos[caller];
   if (!c || !c.alive || c.emergencyLeft <= 0 || !cp || dist(cp, BELL) > RANGE.bell + 60) return [];
+  if (s.sabotage) return [{ to: caller, msg: { k: "toast", text: "bellSabotage" } }];
   if (now < s.phaseEndsAt + EMERGENCY_GRACE_MS) return [{ to: caller, msg: { k: "toast", text: "bellCooldown" } }];
   c.emergencyLeft -= 1;
   return startMeeting(s, caller, "emergency", now);
@@ -174,7 +190,8 @@ export function teacherMeeting(s: HostState, now: number): Out[] {
 function startMeeting(s: HostState, caller: string, reason: "report" | "emergency" | "teacher", now: number, victim?: string): Out[] {
   s.phase = "meeting";
   s.bodies = [];
-  s.meeting = { caller, reason, victim, stage: "clues", endsAt: now + s.settings.clueSecs * 1000, clues: {}, votes: {} };
+  s.sabotage = null;
+  s.meeting = { caller, reason, victim, stage: "clues", endsAt: now + s.settings.clueSecs * 1000, clues: {}, votes: {}, chat: [] };
   return teleportAll(s);
 }
 
@@ -269,8 +286,76 @@ export function checkWin(s: HostState, now: number) {
   });
 }
 
+export function chat(s: HostState, id: string, text: string, now: number): Out[] {
+  const p = P(s, id), m = s.meeting;
+  if (!p || !p.alive || !m || m.stage === "result") return [];
+  const t = String(text || "").replace(/\s+/g, " ").trim().slice(0, 80);
+  if (!t) return [];
+  const mine = m.chat.filter((c) => c.id === id);
+  if (mine.length && now - mine[mine.length - 1].at < 1500) return [];
+  m.chat.push({ id, text: t, at: now });
+  if (m.chat.length > 60) m.chat.splice(0, m.chat.length - 60);
+  return [];
+}
+
+export function sabotage(s: HostState, id: string, kind: "lights" | "alarm", now: number): Out[] {
+  const p = P(s, id);
+  if (s.phase !== "play" || !s.settings.sabotage || !p || p.role !== "impostor" || s.sabotage) return [];
+  if (now < s.sabotageReadyAt) return [];
+  s.sabotage = { kind, startedAt: now, endsAt: kind === "alarm" ? now + ALARM_MS : 0, holds: kind === "alarm" ? { A: [], B: [] } : {} };
+  s.log.push(`sabotage: ${kind}`);
+  return [];
+}
+
+function fixed(s: HostState, now: number) {
+  s.sabotage = null;
+  s.sabotageReadyAt = now + SABOTAGE_COOLDOWN_MS;
+}
+
+export function fixLights(s: HostState, id: string, pos: Positions, now: number): Out[] {
+  const p = P(s, id), pp = pos[id];
+  if (!p || !p.alive || s.sabotage?.kind !== "lights" || !pp || dist(pp, FUSE) > RANGE.fix + 60) return [];
+  fixed(s, now);
+  return [];
+}
+
+export function hold(s: HostState, id: string, panel: string, on: boolean, pos: Positions, now: number): Out[] {
+  const p = P(s, id), sb = s.sabotage, pp = pos[id];
+  const pn = ALARM_PANELS.find((x) => x.id === panel);
+  if (!p || !p.alive || !sb || sb.kind !== "alarm" || !pn) return [];
+  const list = (sb.holds[panel] || []).filter((x) => x !== id);
+  if (on && pp && dist(pp, pn) <= RANGE.fix + 60) list.push(id);
+  sb.holds[panel] = list;
+  if (ALARM_PANELS.every((x) => (sb.holds[x.id] || []).length > 0)) fixed(s, now);
+  return [];
+}
+
+/* holders who walk away let go of the panel */
+function pruneHolds(s: HostState, pos: Positions) {
+  const sb = s.sabotage;
+  if (!sb || sb.kind !== "alarm") return;
+  ALARM_PANELS.forEach((pn) => {
+    sb.holds[pn.id] = (sb.holds[pn.id] || []).filter((id) => {
+      const pp = pos[id], p = P(s, id);
+      return p && p.alive && pp && dist(pp, pn) <= RANGE.fix + 80;
+    });
+  });
+}
+
 /* advance timed phases; returns messages to send */
-export function tick(s: HostState, now: number): Out[] {
+export function tick(s: HostState, now: number, pos: Positions = {}): Out[] {
+  if (s.phase === "play" && s.sabotage?.kind === "alarm") {
+    pruneHolds(s, pos);
+    if (now >= s.sabotage.endsAt) {
+      s.sabotage = null;
+      s.winner = "impostor";
+      s.winReason = "alarm";
+      s.phase = "end";
+      s.phaseEndsAt = now;
+      s.players.forEach((p) => { if (p.role === "impostor") p.score += 3; });
+      return [];
+    }
+  }
   if (s.phase === "reveal" && now >= s.phaseEndsAt) {
     s.phase = "play";
     s.phaseEndsAt = now;
@@ -288,6 +373,7 @@ export function tick(s: HostState, now: number): Out[] {
       s.phase = "play";
       s.phaseEndsAt = now;
       s.players.forEach((p) => { if (p.role === "impostor") p.killReadyAt = now + s.settings.killCooldown * 1000; });
+      s.sabotageReadyAt = Math.max(s.sabotageReadyAt, now + FIRST_SABOTAGE_MS / 2);
       return [...teleportAll(s), ...secrets(s, now)];
     }
   }
@@ -328,14 +414,14 @@ export function publicState(s: HostState, now: number): PublicState {
     phase: s.phase,
     settings: s.settings,
     players: s.players.map((p) => ({
-      id: p.id, name: p.name, look: p.look, alive: p.alive, connected: p.connected, score: p.score,
+      id: p.id, name: p.name, look: p.look, alive: p.alive, connected: p.connected, score: p.score, teacher: p.teacher,
       role: showRoles || (s.eject && s.eject.id === p.id && s.phase === "eject") ? p.role : undefined
     })),
     bodies: s.bodies,
     tasksDone: tt.done,
     tasksTotal: tt.total,
     meeting: m ? {
-      caller: m.caller, reason: m.reason, victim: m.victim, stage: m.stage, clues: m.clues,
+      caller: m.caller, reason: m.reason, victim: m.victim, stage: m.stage, clues: m.clues, chat: m.chat,
       msLeft: Math.max(0, m.endsAt - now), voted: Object.keys(m.votes),
       votes: m.stage === "result" ? m.votes : undefined
     } : null,
@@ -345,6 +431,12 @@ export function publicState(s: HostState, now: number): PublicState {
     msLeft: Math.max(0, s.phaseEndsAt - now),
     round: s.round,
     word: showRoles && s.entry ? s.entry[0] : undefined,
-    decoy: showRoles && s.entry ? s.entry[1] : undefined
+    decoy: showRoles && s.entry ? s.entry[1] : undefined,
+    sabotage: s.sabotage ? {
+      kind: s.sabotage.kind,
+      msLeft: s.sabotage.endsAt ? Math.max(0, s.sabotage.endsAt - now) : 0,
+      held: Object.keys(s.sabotage.holds).filter((k) => s.sabotage!.holds[k].length > 0)
+    } : null,
+    lastKill: s.lastKill && now - s.lastKill.at < 4000 ? { x: s.lastKill.x, y: s.lastKill.y, ago: now - s.lastKill.at, victim: s.lastKill.victim } : null
   };
 }

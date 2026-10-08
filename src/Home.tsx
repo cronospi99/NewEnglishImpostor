@@ -1,72 +1,147 @@
 import { useState } from "react";
-import { Header } from "./shared/Header";
-import { LingoBadge } from "./game/Character";
+import { Lingo, LingoBadge, useClock } from "./game/Character";
+import type { Look } from "./game/types";
+import { sfx, unlockAudio } from "./game/sfx";
 import type { Lang } from "./shared/proximity";
 
 const S = {
   en: {
-    kicker: "Smart Academia de Idiomas", h1a: "Find the", h1b: "impostor.",
-    intro: "A word game for English classes. Play it on the projector, or let every student join from their phone and explore the academy.",
-    classic: "Classic mode", classicP: "One screen, students speak out loud. The teacher deals secret words, logs the clues and runs the vote.",
-    video: "Videogame mode", videoP: "Students scan a QR code, design their character and move around the academy completing English missions — while the impostor hunts them.",
-    host: "Host a game", play: "Play classic", join: "Join a game", code: "Room code", go: "Join", language: "Language"
+    kicker: "Smart Academia de Idiomas",
+    slogan: "Speak English. Trust no one.",
+    sub: "A social deduction game for the classroom",
+    setup: "Set up the game",
+    haveCode: "Got a room code?",
+    code: "CODE", go: "Join",
+    choose: "Choose a mode",
+    classic: "Classic", classicP: "One projector, students speak out loud. The teacher deals secret words, logs the clues and runs the vote.",
+    classicTag: "No phones needed",
+    video: "Videogame", videoP: "Everyone joins from their phone, walks around the academy, completes English missions, sabotages, eliminates — and votes the impostor out.",
+    videoTag: "Phones · QR code",
+    back: "← Back"
   },
   es: {
-    kicker: "Smart Academia de Idiomas", h1a: "Encuentra al", h1b: "impostor.",
-    intro: "Un juego de palabras para clases de idiomas. Juega en el proyector o deja que cada estudiante entre desde su móvil y explore la academia.",
-    classic: "Modo clásico", classicP: "Una pantalla y los estudiantes hablan en voz alta. El profesor reparte palabras, anota las pistas y dirige la votación.",
-    video: "Modo videojuego", videoP: "Los estudiantes escanean un QR, diseñan su personaje y recorren la academia haciendo misiones de inglés, mientras el impostor los caza.",
-    host: "Crear partida", play: "Jugar clásico", join: "Unirse a una partida", code: "Código", go: "Entrar", language: "Idioma"
+    kicker: "Smart Academia de Idiomas",
+    slogan: "Habla inglés. No confíes en nadie.",
+    sub: "Un juego de deducción social para la clase",
+    setup: "Preparar la partida",
+    haveCode: "¿Tienes un código?",
+    code: "CÓDIGO", go: "Entrar",
+    choose: "Elige un modo",
+    classic: "Clásico", classicP: "Un proyector y los estudiantes hablan en voz alta. El profesor reparte las palabras, anota las pistas y dirige la votación.",
+    classicTag: "Sin móviles",
+    video: "Videojuego", videoP: "Todos entran desde el móvil, recorren la academia, hacen misiones de inglés, sabotean, eliminan… y expulsan al impostor.",
+    videoTag: "Móviles · código QR",
+    back: "← Atrás"
   }
 };
 
-const demo = [
+const CROWD: Look[] = [
   { color: 0, hat: "hardhat", face: "none", extra: "lanyard" },
   { color: 7, hat: "gradcap", face: "glasses", extra: "book" },
   { color: 3, hat: "headphones", face: "none", extra: "hello" },
   { color: 9, hat: "beret", face: "freckles", extra: "scarf" },
-  { color: 5, hat: "crown", face: "shades", extra: "bowtie" }
+  { color: 5, hat: "crown", face: "shades", extra: "bowtie" },
+  { color: 2, hat: "cap", face: "none", extra: "pinEN" },
+  { color: 12, hat: "chef", face: "mustache", extra: "tie" },
+  { color: 8, hat: "beanie", face: "stars", extra: "none" }
 ];
+
+/* characters strolling across the bottom of the hero; one of them is sus */
+function Parade() {
+  const t = useClock(true, 30);
+  const W = Math.round(Math.max(640, Math.min(1600, window.innerWidth * 1.25)));
+  return (
+    <svg viewBox={`0 -150 ${W} 170`} preserveAspectRatio="xMidYMax slice" style={{ position: "absolute", left: 0, right: 0, bottom: 0, width: "100%", height: "min(26vh,220px)", pointerEvents: "none" }}>
+      <rect x={0} y={0} width={W} height={20} fill="url(#homeFloor)" />
+      <defs>
+        <pattern id="homeFloor" width="56" height="20" patternUnits="userSpaceOnUse">
+          <rect width="56" height="20" fill="#2b3236" /><path d="M0 0H56" stroke="#0e1113" strokeWidth="6" />
+        </pattern>
+      </defs>
+      {CROWD.map((look, i) => {
+        const speed = 70 + (i % 3) * 18;
+        const x = ((t * speed + i * (W / CROWD.length)) % (W + 200)) - 100;
+        const sus = i === 4;
+        const stop = sus && Math.sin(t * 0.8) > 0.55;
+        return (
+          <g key={i} transform={`translate(${x},${4}) scale(1.05)`}>
+            <Lingo look={look} moving={!stop} dir={stop ? -1 : 1} t={t} seed={"home" + i} />
+            {stop && (
+              <g transform="translate(26 -150)">
+                <rect x={-22} y={-26} width={44} height={36} rx={10} fill="#f2efe6" stroke="#0e1113" strokeWidth={4} />
+                <path d="M -6 9 L -12 20 L 4 9" fill="#f2efe6" stroke="#0e1113" strokeWidth={4} strokeLinejoin="round" />
+                <text y={2} textAnchor="middle" fontSize={26} fontWeight={900} fontFamily="Arial, sans-serif" fill="#e23d4f">?!</text>
+              </g>
+            )}
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
 
 export function Home({ lang, setLang, go }: { lang: Lang; setLang: (l: Lang) => void; go: (p: string) => void }) {
   const T = S[lang];
+  const [step, setStep] = useState<"hero" | "modes">("hero");
   const [code, setCode] = useState("");
+
   return (
-    <div className="page">
-      <Header phase="Menu" actions={[{ label: lang === "es" ? "English" : "Español", onClick: () => setLang(lang === "es" ? "en" : "es") }]} />
-      <div className="pad-sm" style={{ flex: 1, padding: "34px 30px", display: "flex", flexDirection: "column", gap: 28, maxWidth: 1300 }}>
-        <div>
-          <div className="kicker" style={{ marginBottom: 16 }}>{T.kicker}</div>
-          <h1 className="h1">{T.h1a}<br />{T.h1b}</h1>
-          <p className="lead" style={{ maxWidth: "52ch" }}>{T.intro}</p>
-          <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-            {demo.map((l, i) => <div key={i} style={{ animation: `bob ${1.3 + i * 0.17}s ease-in-out infinite` }}><LingoBadge look={l} size={64} /></div>)}
-          </div>
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(320px,100%),1fr))", gap: 22 }}>
-          <div className="plate" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <div className="lbl lbl-y">01</div>
-            <div className="h2" style={{ margin: 0, fontSize: 30 }}>{T.classic}</div>
-            <p style={{ margin: 0, fontSize: 16, lineHeight: 1.55, color: "rgba(242,239,230,0.75)" }}>{T.classicP}</p>
-            <div><button type="button" className="btn btn-y" onClick={() => go("/classic")}>{T.play}</button></div>
-          </div>
-          <div className="plate" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <div className="lbl lbl-y">02</div>
-            <div className="h2" style={{ margin: 0, fontSize: 30 }}>{T.video}</div>
-            <p style={{ margin: 0, fontSize: 16, lineHeight: 1.55, color: "rgba(242,239,230,0.75)" }}>{T.videoP}</p>
-            <div><button type="button" className="btn btn-o" onClick={() => go("/host")}>{T.host}</button></div>
-          </div>
-          <div className="plate" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <div className="lbl lbl-y">03</div>
-            <div className="h2" style={{ margin: 0, fontSize: 30 }}>{T.join}</div>
-            <form onSubmit={(e) => { e.preventDefault(); if (code.length >= 4) go("/join/" + code); }} style={{ display: "flex", gap: 8 }}>
-              <input className="field" value={code} maxLength={6} placeholder={T.code} onChange={(e) => setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))}
-                style={{ font: "400 24px 'Archivo Black',sans-serif", letterSpacing: "0.2em", textTransform: "uppercase" }} />
-              <button type="submit" className="btn btn-y" disabled={code.length < 4}>{T.go}</button>
-            </form>
-          </div>
-        </div>
+    <div className="page" style={{ position: "relative", overflow: "hidden", minHeight: "100dvh" }}>
+      <div className="hazard" style={{ borderTop: 0, borderBottom: "3px solid #0e1113" }} />
+      <div style={{ position: "absolute", top: 22, right: 18, display: "flex", gap: 8, zIndex: 3 }}>
+        <button type="button" className="btn btn-s btn-hdr" onClick={() => setLang(lang === "es" ? "en" : "es")}>{lang === "es" ? "English" : "Español"}</button>
       </div>
+      <div style={{ position: "absolute", inset: 0, background: "radial-gradient(900px 520px at 50% 38%, rgba(245,197,24,0.12), transparent 70%)", pointerEvents: "none" }} />
+
+      {step === "hero" ? (
+        <div style={{ position: "relative", zIndex: 2, flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", padding: "40px 16px calc(min(26vh,220px) + 24px)", gap: 18 }}>
+          <div className="kicker">{T.kicker}</div>
+          <h1 style={{ margin: 0, font: "400 clamp(64px,15vw,210px) 'Archivo Black',sans-serif", lineHeight: 0.86, letterSpacing: "-0.02em", textTransform: "uppercase", color: "#f5c518", textShadow: "6px 6px 0 #0e1113, 12px 12px 0 rgba(14,17,19,0.35)", WebkitTextStroke: "3px #0e1113", animation: "stampIn .6s cubic-bezier(.2,1.5,.4,1) both" }}>
+            Impostor
+          </h1>
+          <div style={{ font: "400 clamp(20px,3.2vw,40px) 'Archivo Black',sans-serif", textTransform: "uppercase", textShadow: "3px 3px 0 #0e1113" }}>{T.slogan}</div>
+          <div style={{ font: "700 clamp(12px,1.3vw,15px) 'Space Mono',monospace", letterSpacing: "0.16em", textTransform: "uppercase", color: "rgba(242,239,230,0.6)" }}>{T.sub}</div>
+          <button type="button" className="btn btn-y" onClick={() => { unlockAudio(); sfx.pop(); setStep("modes"); }}
+            style={{ marginTop: 10, padding: "22px 44px", font: "400 clamp(20px,2.4vw,28px) 'Archivo Black',sans-serif", boxShadow: "0 8px 0 #0e1113", animation: "floaty 3s ease-in-out infinite" }}>
+            ▶ {T.setup}
+          </button>
+          <form onSubmit={(e) => { e.preventDefault(); if (code.length >= 4) go("/join/" + code); }} style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, flexWrap: "wrap", justifyContent: "center" }}>
+            <span className="lbl">{T.haveCode}</span>
+            <input value={code} maxLength={6} placeholder={T.code} onChange={(e) => setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))}
+              className="field" style={{ width: 150, padding: "8px 10px", font: "400 18px 'Archivo Black',sans-serif", letterSpacing: "0.2em", textAlign: "center" }} />
+            <button type="submit" className="btn btn-s btn-sm" disabled={code.length < 4}>{T.go}</button>
+          </form>
+        </div>
+      ) : (
+        <div style={{ position: "relative", zIndex: 2, flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "60px 16px calc(min(26vh,220px) + 24px)", gap: 22 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 14, width: "min(1100px,100%)" }}>
+            <button type="button" className="btn btn-s btn-sm" onClick={() => setStep("hero")}>{T.back}</button>
+            <h2 className="h2" style={{ margin: 0 }}>{T.choose}</h2>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(340px,100%),1fr))", gap: 22, width: "min(1100px,100%)" }}>
+            <ModeCard title={T.classic} text={T.classicP} tag={T.classicTag} color="#f5c518" looks={[CROWD[0], CROWD[1], CROWD[3]]} onClick={() => go("/classic")} icon="📽" />
+            <ModeCard title={T.video} text={T.videoP} tag={T.videoTag} color="#f07a1a" looks={[CROWD[2], CROWD[4], CROWD[5]]} onClick={() => go("/host")} icon="🎮" />
+          </div>
+        </div>
+      )}
+      <Parade />
     </div>
+  );
+}
+
+function ModeCard({ title, text, tag, color, looks, onClick, icon }: { title: string; text: string; tag: string; color: string; looks: Look[]; onClick: () => void; icon: string }) {
+  return (
+    <button type="button" onClick={onClick} className="plate"
+      style={{ textAlign: "left", color: "#f2efe6", cursor: "pointer", display: "flex", flexDirection: "column", gap: 12, padding: "22px 22px 24px", animation: "popIn .35s", transition: "transform .12s" }}
+      onMouseEnter={(e) => (e.currentTarget.style.transform = "translateY(-4px)")} onMouseLeave={(e) => (e.currentTarget.style.transform = "none")}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span className="tag" style={{ color }}>{tag}</span>
+        <span style={{ fontSize: 34 }}>{icon}</span>
+      </div>
+      <div style={{ display: "flex", gap: 4 }}>{looks.map((l, i) => <LingoBadge key={i} look={l} size={58} seed={title + i} />)}</div>
+      <div style={{ font: "400 clamp(30px,3.4vw,46px) 'Archivo Black',sans-serif", textTransform: "uppercase", color, textShadow: "3px 3px 0 #0e1113" }}>{title}</div>
+      <div style={{ fontSize: 17, lineHeight: 1.55, color: "rgba(242,239,230,0.8)" }}>{text}</div>
+      <span className="btn btn-y" style={{ alignSelf: "flex-start", background: color }}>▶</span>
+    </button>
   );
 }

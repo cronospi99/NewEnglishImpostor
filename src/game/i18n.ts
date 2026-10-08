@@ -29,6 +29,14 @@ const en = {
   late: "The game already started — you'll join the next one.", full: "The room is full.", bellCooldown: "The bell isn't ready yet.",
   home: "Home", noRelay: "Can't reach the game server.",
   hostHelp: "Students scan the QR code with their phones. Everyone moves around the academy on their phone; this screen shows the shift.",
+  vent: "Vent", exitVent: "Exit", inVent: "Inside the vent — hop or exit", sabotage: "Sabotage", lightsOut: "Lights out", fireAlarm: "Fire alarm",
+  fix: "Fix", hold: "Hold", holdHelp: "Hold here while someone holds the other alarm panel!",
+  lightsMsg: "Lights out! Fix the fuse box in the South hallway.", alarmMsg: "Fire alarm! Hold panels A (Library) and B (Director's Office) at the same time.",
+  fuseHelp: "Flip every switch up.", bellSabotage: "You can't ring the bell during a sabotage.", whyAlarm: "The fire alarm went off — the academy was evacuated.",
+  chat: "Chat", accuse: "Say something", sendChat: "Send", chatPh: "Write a short message…", pickPlayer: "Choose a player", pickRoom: "Choose a room",
+  emotes: "Emotes", teacherBadge: "Teacher", teacherPlays: "Teacher plays too", teacherPlaysHelp: "Scan this with your phone to join as a player (or open it in a new window).", openWindow: "Open in new window",
+  sabotageOpt: "Sabotage", ventsOpt: "Vents", chatOpt: "Meeting chat", quickOnly: "Quick phrases", freeText: "Free text", on: "On", off: "Off",
+  eliminatedBy: "You were eliminated by", deadBody: "Dead body reported!", emergency: "Emergency meeting!", mute: "Sound", votedFor: "voted for",
   moveHelp: "Drag anywhere to move · tap the buttons to act"
 };
 
@@ -61,6 +69,14 @@ const es: typeof en = {
   late: "La partida ya empezó: entrarás en la siguiente.", full: "La sala está llena.", bellCooldown: "El timbre aún no está listo.",
   home: "Inicio", noRelay: "No se puede conectar con el servidor del juego.",
   hostHelp: "Los estudiantes escanean el QR con el móvil. Cada uno se mueve por la academia en su móvil; esta pantalla muestra el turno.",
+  vent: "Conducto", exitVent: "Salir", inVent: "Dentro del conducto: salta o sal", sabotage: "Sabotaje", lightsOut: "Apagón", fireAlarm: "Alarma de incendio",
+  fix: "Arreglar", hold: "Mantener", holdHelp: "¡Mantén aquí mientras alguien mantiene el otro panel!",
+  lightsMsg: "¡Apagón! Arregla los fusibles en el pasillo sur.", alarmMsg: "¡Alarma! Mantened los paneles A (Biblioteca) y B (Dirección) a la vez.",
+  fuseHelp: "Sube todos los interruptores.", bellSabotage: "No puedes tocar el timbre durante un sabotaje.", whyAlarm: "Sonó la alarma de incendio: evacuaron la academia.",
+  chat: "Chat", accuse: "Di algo", sendChat: "Enviar", chatPh: "Escribe un mensaje corto…", pickPlayer: "Elige un jugador", pickRoom: "Elige una sala",
+  emotes: "Emociones", teacherBadge: "Profe", teacherPlays: "El profe también juega", teacherPlaysHelp: "Escanéalo con tu móvil para jugar (o ábrelo en otra ventana).", openWindow: "Abrir en ventana nueva",
+  sabotageOpt: "Sabotaje", ventsOpt: "Conductos", chatOpt: "Chat de reunión", quickOnly: "Frases rápidas", freeText: "Texto libre", on: "Sí", off: "No",
+  eliminatedBy: "Te eliminó", deadBody: "¡Cuerpo encontrado!", emergency: "¡Reunión de emergencia!", mute: "Sonido", votedFor: "votó a",
   moveHelp: "Arrastra para moverte · toca los botones para actuar"
 };
 
