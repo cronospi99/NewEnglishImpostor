@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "build": "echo \"relay: no build step needed\"",
     "dev": "wrangler dev",
     "deploy": "wrangler deploy"
   },
