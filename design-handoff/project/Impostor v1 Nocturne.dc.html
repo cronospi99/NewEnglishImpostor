@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+<style>
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:#161826;color:#e9e9ed;font-family:Inter,system-ui,sans-serif}
+a{color:#9184d9;text-underline-offset:3px}
+a:hover{color:#d2cefd}
+:focus{outline:none}
+:focus-visible{outline:2px solid #9184d9;outline-offset:2px}
+::selection{background:rgba(145,132,217,0.3)}
+input{font-family:inherit}
+@keyframes breathe{0%,100%{opacity:.4}50%{opacity:1}}
+</style>
+</helmet>
+<div style="min-height:100vh;display:flex;flex-direction:column;background:radial-gradient(1100px 620px at 12% -12%, #1e2137 0%, #161826 62%);color:#e9e9ed;font-family:Inter,system-ui,sans-serif">
+
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:24px;padding:14px 34px;border-bottom:1px solid rgba(233,233,237,0.16)">
+    <div style="display:flex;align-items:center;gap:14px">
+      <div style="width:9px;height:9px;border-radius:2px;background:#9184d9"></div>
+      <div style="font-size:13px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase">Impostor</div>
+      <div style="font-size:13px;letter-spacing:0.08em;text-transform:uppercase;color:rgba(233,233,237,0.45)">{{ phaseLabel }}</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:22px;font-size:13px;color:rgba(233,233,237,0.55)">
+      <span>Round {{ roundLabel }}</span>
+      <span>{{ levelLabel }}</span>
+      <button type="button" onClick="{{ goSetup }}" style="padding:6px 12px;border:1px solid #3f424d;background:transparent;color:rgba(233,233,237,0.7);border-radius:8px;font:500 13px Inter,sans-serif;cursor:pointer" style-hover="background:rgba(145,132,217,0.12);border-color:#9184d9;color:#d2cefd">Setup</button>
+    </div>
+  </div>
+
+  <sc-if value="{{ isSetup }}" hint-placeholder-val="{{ true }}">
+    <div style="flex:1;padding:44px 34px 34px;display:grid;grid-template-columns:minmax(280px,1fr) minmax(420px,1.15fr);gap:56px;align-items:start;max-width:1500px">
+      <div>
+        <h1 style="font-size:56px;font-weight:500;letter-spacing:-0.02em;line-height:1.05;margin:0 0 18px">Find the impostor.</h1>
+        <p style="font-size:17px;line-height:1.6;color:rgba(233,233,237,0.65);margin:0 0 14px;max-width:38ch;text-wrap:pretty">Everyone gets the same secret word — except one player, who gets a decoy. Each student says one word to describe theirs. Then the class votes.</p>
+        <p style="font-size:17px;line-height:1.6;color:rgba(233,233,237,0.65);margin:0 0 28px;max-width:38ch;text-wrap:pretty">Cards are dealt one player at a time on this screen. Call the number, everyone else looks away.</p>
+        <div style="display:flex;flex-direction:column;gap:10px;padding:18px 20px;border:1px solid #3f424d;border-radius:14px;background:rgba(35,37,50,0.6);max-width:38ch">
+          <div style="font-size:12px;letter-spacing:0.1em;text-transform:uppercase;color:rgba(233,233,237,0.45)">Board language</div>
+          <div style="font-size:15px;line-height:1.7;color:rgba(233,233,237,0.8)">I think it's <em style="color:#d2cefd;font-style:normal">[name]</em>, because…<br />Why did you say that word?<br />I'm not sure — it could be anyone.</div>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:26px">
+        <div>
+          <div style="font-size:12px;letter-spacing:0.1em;text-transform:uppercase;color:rgba(233,233,237,0.45);margin-bottom:10px">Level</div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px">
+            <sc-for list="{{ levelOpts }}" as="lv" hint-placeholder-count="6">
+              <button type="button" onClick="{{ lv.pick }}" style="padding:9px 16px;border-radius:8px;font:500 14px Inter,sans-serif;cursor:pointer;background:transparent;border:1px solid {{ lv.border }};color:{{ lv.color }}" style-hover="background:rgba(145,132,217,0.12)">{{ lv.id }}</button>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:26px">
+          <div>
+            <div style="font-size:12px;letter-spacing:0.1em;text-transform:uppercase;color:rgba(233,233,237,0.45);margin-bottom:10px">Players</div>
+            <div style="display:flex;align-items:center;gap:12px">
+              <button type="button" onClick="{{ fewerPlayers }}" style="width:38px;height:38px;border:1px solid #3f424d;background:transparent;color:#e9e9ed;border-radius:8px;font:500 18px Inter,sans-serif;cursor:pointer" style-hover="border-color:#9184d9;color:#d2cefd">−</button>
+              <div style="min-width:40px;text-align:center;font-size:24px;font-weight:500">{{ playerCount }}</div>
+              <button type="button" onClick="{{ morePlayers }}" style="width:38px;height:38px;border:1px solid #3f424d;background:transparent;color:#e9e9ed;border-radius:8px;font:500 18px Inter,sans-serif;cursor:pointer" style-hover="border-color:#9184d9;color:#d2cefd">+</button>
+            </div>
+          </div>
+          <div>
+            <div style="font-size:12px;letter-spacing:0.1em;text-transform:uppercase;color:rgba(233,233,237,0.45);margin-bottom:10px">Impostors</div>
+            <div style="display:flex;gap:8px">
+              <sc-for list="{{ impOpts }}" as="io" hint-placeholder-count="2">
+                <button type="button" onClick="{{ io.pick }}" style="padding:9px 18px;border-radius:8px;font:500 14px Inter,sans-serif;cursor:pointer;background:transparent;border:1px solid {{ io.border }};color:{{ io.color }}" style-hover="background:rgba(145,132,217,0.12)">{{ io.label }}</button>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div style="font-size:12px;letter-spacing:0.1em;text-transform:uppercase;color:rgba(233,233,237,0.45);margin-bottom:10px">The impostor sees</div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px">
+            <sc-for list="{{ seeOpts }}" as="so" hint-placeholder-count="3">
+              <button type="button" onClick="{{ so.pick }}" style="padding:9px 16px;border-radius:8px;font:500 14px Inter,sans-serif;cursor:pointer;background:transparent;border:1px solid {{ so.border }};color:{{ so.color }}" style-hover="background:rgba(145,132,217,0.12)">{{ so.label }}</button>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:26px">
+          <div>
+            <div style="font-size:12px;letter-spacing:0.1em;text-transform:uppercase;color:rgba(233,233,237,0.45);margin-bottom:10px">Clue round</div>
+            <div style="display:flex;gap:8px">
+              <sc-for list="{{ clueOpts }}" as="co" hint-placeholder-count="3">
+                <button type="button" onClick="{{ co.pick }}" style="padding:9px 14px;border-radius:8px;font:500 14px Inter,sans-serif;cursor:pointer;background:transparent;border:1px solid {{ co.border }};color:{{ co.color }}" style-hover="background:rgba(145,132,217,0.12)">{{ co.label }}</button>
+              </sc-for>
+            </div>
+          </div>
+          <div>
+            <div style="font-size:12px;letter-spacing:0.1em;text-transform:uppercase;color:rgba(233,233,237,0.45);margin-bottom:10px">Discussion</div>
+            <div style="display:flex;gap:8px">
+              <sc-for list="{{ discussOpts }}" as="do" hint-placeholder-count="3">
+                <button type="button" onClick="{{ do.pick }}" style="padding:9px 14px;border-radius:8px;font:500 14px Inter,sans-serif;cursor:pointer;background:transparent;border:1px solid {{ do.border }};color:{{ do.color }}" style-hover="background:rgba(145,132,217,0.12)">{{ do.label }}</button>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div style="font-size:12px;letter-spacing:0.1em;text-transform:uppercase;color:rgba(233,233,237,0.45);margin-bottom:10px">Names</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px">
+            <sc-for list="{{ players }}" as="p" hint-placeholder-count="6">
+              <div style="display:flex;align-items:center;gap:8px;padding:0 10px;border:1px solid #3f424d;border-radius:8px;background:rgba(35,37,50,0.5)">
+                <span style="font-size:12px;color:rgba(233,233,237,0.4);min-width:14px">{{ p.num }}</span>
+                <input type="text" defaultValue="{{ p.name }}" onInput="{{ p.onInput }}" placeholder="Name" style="flex:1;min-width:0;padding:9px 0;border:0;background:transparent;color:#e9e9ed;font-size:14px" />
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:16px;padding-top:4px">
+          <button type="button" onClick="{{ startRound }}" style="padding:15px 30px;border:1px solid #9184d9;background:transparent;color:#d2cefd;border-radius:8px;font:500 17px Inter,sans-serif;cursor:pointer" style-hover="background:rgba(145,132,217,0.14)">Deal the cards</button>
+          <span style="font-size:13px;color:rgba(233,233,237,0.4)">Space or → advances the game</span>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ isDeal }}">
+    <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:34px;padding:40px 34px 56px;text-align:center">
+      <div style="font-size:13px;letter-spacing:0.16em;text-transform:uppercase;color:rgba(233,233,237,0.45)">Card {{ dealPos }} of {{ playerCount }} — everyone else, look away</div>
+      <div style="display:flex;align-items:baseline;gap:18px">
+        <div style="font-size:clamp(56px,7vw,96px);font-weight:500;letter-spacing:-0.02em;color:#9184d9">{{ dealNum }}</div>
+        <div style="font-size:clamp(34px,4.4vw,60px);font-weight:500;letter-spacing:-0.02em">{{ dealName }}</div>
+      </div>
+
+      <sc-if value="{{ dealHidden }}">
+        <div style="display:flex;flex-direction:column;align-items:center;gap:22px">
+          <div style="width:min(760px,84vw);height:clamp(180px,26vh,260px);border:1px solid #3f424d;border-radius:14px;background:repeating-linear-gradient(135deg,#1c1f2f 0 12px,#232532 12px 24px);display:flex;align-items:center;justify-content:center">
+            <span style="font-size:15px;letter-spacing:0.14em;text-transform:uppercase;color:rgba(233,233,237,0.35);animation:breathe 2.6s ease-in-out infinite">Card face down</span>
+          </div>
+          <button type="button" onClick="{{ flipCard }}" style="padding:15px 32px;border:1px solid #9184d9;background:transparent;color:#d2cefd;border-radius:8px;font:500 17px Inter,sans-serif;cursor:pointer" style-hover="background:rgba(145,132,217,0.14)">Show my card</button>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ dealShown }}">
+        <div style="display:flex;flex-direction:column;align-items:center;gap:22px">
+          <div style="width:min(760px,84vw);min-height:clamp(180px,26vh,260px);border:1px solid {{ cardBorder }};border-radius:14px;background:{{ cardBg }};display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:28px 32px;box-shadow:0 16px 40px rgba(0,0,0,0.65)">
+            <div style="font-size:13px;letter-spacing:0.16em;text-transform:uppercase;color:{{ cardKicker }}">{{ cardRole }}</div>
+            <div style="font-size:clamp(40px,6.4vw,88px);font-weight:500;letter-spacing:-0.025em;line-height:1.05">{{ cardWord }}</div>
+            <sc-if value="{{ cardHint }}">
+              <div style="font-size:clamp(16px,1.6vw,20px);color:rgba(233,233,237,0.6)">{{ cardHint }}</div>
+            </sc-if>
+          </div>
+          <button type="button" onClick="{{ nextCard }}" style="padding:15px 32px;border:1px solid #9184d9;background:transparent;color:#d2cefd;border-radius:8px;font:500 17px Inter,sans-serif;cursor:pointer" style-hover="background:rgba(145,132,217,0.14)">{{ nextCardLabel }}</button>
+        </div>
+      </sc-if>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ isClue }}">
+    <div style="flex:1;display:grid;grid-template-columns:minmax(320px,1fr) minmax(360px,0.9fr);gap:48px;padding:40px 34px;align-items:start">
+      <div>
+        <h2 style="font-size:clamp(34px,4vw,52px);font-weight:500;letter-spacing:-0.02em;margin:0 0 14px">One word each.</h2>
+        <p style="font-size:19px;line-height:1.6;color:rgba(233,233,237,0.65);max-width:34ch;margin:0 0 34px;text-wrap:pretty">Describe your word with a single adjective or noun. Don't say the word itself. Don't repeat anyone.</p>
+        <div style="font-size:clamp(72px,11vw,150px);font-weight:500;letter-spacing:-0.03em;line-height:1;color:{{ timerColor }};font-variant-numeric:tabular-nums">{{ timeLabel }}</div>
+        <div style="display:flex;gap:12px;margin-top:26px">
+          <button type="button" onClick="{{ toggleTimer }}" style="padding:13px 26px;border:1px solid #3f424d;background:transparent;color:rgba(233,233,237,0.8);border-radius:8px;font:500 16px Inter,sans-serif;cursor:pointer" style-hover="border-color:#9184d9;color:#d2cefd">{{ timerBtn }}</button>
+          <button type="button" onClick="{{ toDiscuss }}" style="padding:13px 26px;border:1px solid #9184d9;background:transparent;color:#d2cefd;border-radius:8px;font:500 16px Inter,sans-serif;cursor:pointer" style-hover="background:rgba(145,132,217,0.14)">Open discussion</button>
+        </div>
+      </div>
+      <div>
+        <div style="font-size:12px;letter-spacing:0.1em;text-transform:uppercase;color:rgba(233,233,237,0.45);margin-bottom:14px">Speaking order — tap a name when they've spoken</div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <sc-for list="{{ clueList }}" as="c" hint-placeholder-count="6">
+            <button type="button" onClick="{{ c.tap }}" style="display:flex;align-items:center;gap:14px;text-align:left;padding:11px 16px;border-radius:8px;cursor:pointer;font:400 18px Inter,sans-serif;border:1px solid {{ c.border }};background:{{ c.bg }};color:{{ c.color }}" style-hover="border-color:#9184d9">
+              <span style="font-size:13px;color:rgba(233,233,237,0.4);min-width:18px">{{ c.num }}</span>
+              <span style="flex:1">{{ c.name }}</span>
+              <span style="font-size:13px;color:rgba(233,233,237,0.4)">{{ c.mark }}</span>
+            </button>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ isDiscuss }}">
+    <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:40px 34px;text-align:center">
+      <div style="font-size:13px;letter-spacing:0.16em;text-transform:uppercase;color:rgba(233,233,237,0.45)">Discussion</div>
+      <div style="font-size:clamp(96px,16vw,240px);font-weight:500;letter-spacing:-0.035em;line-height:1;color:{{ timerColor }};font-variant-numeric:tabular-nums">{{ timeLabel }}</div>
+      <p style="font-size:clamp(18px,2vw,26px);color:rgba(233,233,237,0.6);max-width:30ch;margin:0;text-wrap:pretty">Ask each other about the words you heard. Who sounded unsure?</p>
+      <div style="display:flex;gap:12px;margin-top:14px">
+        <button type="button" onClick="{{ toggleTimer }}" style="padding:14px 28px;border:1px solid #3f424d;background:transparent;color:rgba(233,233,237,0.8);border-radius:8px;font:500 16px Inter,sans-serif;cursor:pointer" style-hover="border-color:#9184d9;color:#d2cefd">{{ timerBtn }}</button>
+        <button type="button" onClick="{{ toVote }}" style="padding:14px 28px;border:1px solid #9184d9;background:transparent;color:#d2cefd;border-radius:8px;font:500 16px Inter,sans-serif;cursor:pointer" style-hover="background:rgba(145,132,217,0.14)">Vote now</button>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ isVote }}">
+    <div style="flex:1;display:flex;flex-direction:column;gap:26px;padding:40px 34px">
+      <div>
+        <h2 style="font-size:clamp(30px,3.4vw,44px);font-weight:500;letter-spacing:-0.02em;margin:0 0 8px">Who is the impostor?</h2>
+        <p style="font-size:17px;color:rgba(233,233,237,0.55);margin:0">{{ voteHelp }}</p>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px">
+        <sc-for list="{{ voteList }}" as="v" hint-placeholder-count="6">
+          <button type="button" onClick="{{ v.tap }}" style="display:flex;align-items:center;gap:14px;text-align:left;padding:20px 20px;border-radius:14px;cursor:pointer;font:500 22px Inter,sans-serif;border:1px solid {{ v.border }};background:{{ v.bg }};color:{{ v.color }}" style-hover="border-color:#9184d9">
+            <span style="font-size:14px;color:rgba(233,233,237,0.4);min-width:20px">{{ v.num }}</span>
+            <span>{{ v.name }}</span>
+          </button>
+        </sc-for>
+      </div>
+      <div style="display:flex;gap:12px;margin-top:auto">
+        <button type="button" onClick="{{ toReveal }}" style="padding:15px 30px;border:1px solid #9184d9;background:transparent;color:#d2cefd;border-radius:8px;font:500 17px Inter,sans-serif;cursor:pointer" style-hover="background:rgba(145,132,217,0.14)">Reveal</button>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ isReveal }}">
+    <div style="flex:1;display:grid;grid-template-columns:minmax(340px,1.1fr) minmax(300px,0.8fr);gap:48px;padding:40px 34px;align-items:center">
+      <div>
+        <div style="font-size:13px;letter-spacing:0.16em;text-transform:uppercase;color:{{ verdictColor }};margin-bottom:16px">{{ verdict }}</div>
+        <h2 style="font-size:clamp(38px,5vw,68px);font-weight:500;letter-spacing:-0.025em;line-height:1.05;margin:0 0 22px">{{ impostorLine }}</h2>
+        <div style="display:flex;flex-wrap:wrap;gap:34px;margin-bottom:30px">
+          <div>
+            <div style="font-size:12px;letter-spacing:0.1em;text-transform:uppercase;color:rgba(233,233,237,0.45);margin-bottom:6px">The word</div>
+            <div style="font-size:clamp(26px,3vw,40px);font-weight:500;letter-spacing:-0.02em">{{ word }}</div>
+          </div>
+          <div>
+            <div style="font-size:12px;letter-spacing:0.1em;text-transform:uppercase;color:rgba(233,233,237,0.45);margin-bottom:6px">The decoy</div>
+            <div style="font-size:clamp(26px,3vw,40px);font-weight:500;letter-spacing:-0.02em;color:#b5abfc">{{ decoy }}</div>
+          </div>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:12px">
+          <button type="button" onClick="{{ toggleGuess }}" style="padding:13px 24px;border-radius:8px;cursor:pointer;font:500 16px Inter,sans-serif;background:transparent;border:1px solid {{ guessBorder }};color:{{ guessColor }}" style-hover="background:rgba(145,132,217,0.12)">{{ guessLabel }}</button>
+          <button type="button" onClick="{{ nextRound }}" style="padding:13px 24px;border:1px solid #9184d9;background:transparent;color:#d2cefd;border-radius:8px;font:500 16px Inter,sans-serif;cursor:pointer" style-hover="background:rgba(145,132,217,0.14)">Next round</button>
+          <button type="button" onClick="{{ goScores }}" style="padding:13px 24px;border:1px solid #3f424d;background:transparent;color:rgba(233,233,237,0.75);border-radius:8px;font:500 16px Inter,sans-serif;cursor:pointer" style-hover="border-color:#9184d9;color:#d2cefd">Scoreboard</button>
+        </div>
+      </div>
+      <div style="padding:24px 26px;border:1px solid #3f424d;border-radius:14px;background:rgba(35,37,50,0.6)">
+        <div style="font-size:12px;letter-spacing:0.1em;text-transform:uppercase;color:rgba(233,233,237,0.45);margin-bottom:14px">This round</div>
+        <div style="display:flex;flex-direction:column;gap:9px">
+          <sc-for list="{{ roundLines }}" as="r" hint-placeholder-count="4">
+            <div style="display:flex;justify-content:space-between;gap:16px;font-size:16px;color:rgba(233,233,237,0.8)">
+              <span>{{ r.name }}</span>
+              <span style="color:{{ r.color }};font-variant-numeric:tabular-nums">{{ r.delta }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ isScores }}">
+    <div style="flex:1;display:flex;flex-direction:column;gap:26px;padding:40px 34px">
+      <h2 style="font-size:clamp(30px,3.4vw,44px);font-weight:500;letter-spacing:-0.02em;margin:0">Scoreboard</h2>
+      <div style="display:flex;flex-direction:column;gap:4px;max-width:900px">
+        <sc-for list="{{ scoreRows }}" as="s" hint-placeholder-count="6">
+          <div style="display:flex;align-items:center;gap:18px;padding:12px 0;border-bottom:1px solid rgba(233,233,237,0.12)">
+            <span style="font-size:14px;color:rgba(233,233,237,0.4);min-width:24px">{{ s.rank }}</span>
+            <span style="font-size:22px;min-width:180px">{{ s.name }}</span>
+            <span style="flex:1;height:6px;border-radius:3px;background:rgba(233,233,237,0.08);overflow:hidden;display:block">
+              <span style="display:block;height:100%;background:#9184d9;width:{{ s.pct }}"></span>
+            </span>
+            <span style="font-size:22px;font-weight:500;min-width:44px;text-align:right;font-variant-numeric:tabular-nums">{{ s.score }}</span>
+          </div>
+        </sc-for>
+      </div>
+      <div style="display:flex;gap:12px">
+        <button type="button" onClick="{{ nextRound }}" style="padding:14px 28px;border:1px solid #9184d9;background:transparent;color:#d2cefd;border-radius:8px;font:500 16px Inter,sans-serif;cursor:pointer" style-hover="background:rgba(145,132,217,0.14)">Next round</button>
+        <button type="button" onClick="{{ resetScores }}" style="padding:14px 28px;border:1px solid #3f424d;background:transparent;color:rgba(233,233,237,0.75);border-radius:8px;font:500 16px Inter,sans-serif;cursor:pointer" style-hover="border-color:#9184d9;color:#d2cefd">Clear scores</button>
+      </div>
+    </div>
+  </sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;startingLevel&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;A1&quot;,&quot;A2&quot;,&quot;B1&quot;,&quot;B2&quot;,&quot;C1&quot;,&quot;Mixed&quot;],&quot;default&quot;:&quot;B1&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Game&quot;},&quot;startingPlayers&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:6,&quot;min&quot;:3,&quot;max&quot;:20,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Game&quot;},&quot;impostorSees&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;decoy&quot;,&quot;hint&quot;,&quot;both&quot;],&quot;default&quot;:&quot;decoy&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Game&quot;},&quot;clueSeconds&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:90,&quot;min&quot;:30,&quot;max&quot;:300,&quot;unit&quot;:&quot;s&quot;,&quot;section&quot;:&quot;Timers&quot;,&quot;tsType&quot;:&quot;number&quot;},&quot;discussSeconds&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:120,&quot;min&quot;:30,&quot;max&quot;:600,&quot;unit&quot;:&quot;s&quot;,&quot;section&quot;:&quot;Timers&quot;,&quot;tsType&quot;:&quot;number&quot;}}">
+class Component extends DCLogic {
+  packs = {
+    A1: [
+      ["PIZZA", "SOUP", "Something you eat"],
+      ["DOG", "CAT", "An animal people keep"],
+      ["SCHOOL", "HOSPITAL", "A big building"],
+      ["RAIN", "SNOW", "Weather"],
+      ["BUS", "TRAIN", "It carries people"],
+      ["APPLE", "ORANGE", "It grows on a tree"],
+      ["TEACHER", "DOCTOR", "A job"],
+      ["BEACH", "PARK", "A place to relax"]
+    ],
+    A2: [
+      ["AIRPORT", "TRAIN STATION", "People travel from here"],
+      ["WINTER", "AUTUMN", "A time of year"],
+      ["SUPERMARKET", "MARKET", "You spend money here"],
+      ["FOOTBALL", "BASKETBALL", "A sport with a ball"],
+      ["BIRTHDAY", "WEDDING", "A day people celebrate"],
+      ["LIBRARY", "MUSEUM", "A quiet building"],
+      ["MOUNTAIN", "HILL", "Part of a landscape"],
+      ["BREAKFAST", "DINNER", "A meal"]
+    ],
+    B1: [
+      ["JOB INTERVIEW", "EXAM", "A stressful situation"],
+      ["SMARTPHONE", "LAPTOP", "A device people use daily"],
+      ["TRAFFIC JAM", "QUEUE", "Something that wastes time"],
+      ["HOMESICK", "NERVOUS", "A feeling"],
+      ["CAMPING", "HIKING", "An outdoor activity"],
+      ["RECIPE", "MENU", "Something you read before eating"],
+      ["DEADLINE", "APPOINTMENT", "Something in your calendar"],
+      ["SUNBURN", "HEADACHE", "Something that hurts"]
+    ],
+    B2: [
+      ["JET LAG", "INSOMNIA", "It affects your sleep"],
+      ["PAPERWORK", "SMALL PRINT", "Something slow and official"],
+      ["NOSTALGIA", "REGRET", "An emotion about the past"],
+      ["START-UP", "FAMILY BUSINESS", "A kind of company"],
+      ["ECO-TOURISM", "BACKPACKING", "A way of travelling"],
+      ["PEER PRESSURE", "GOSSIP", "Something social and unpleasant"],
+      ["LANDLORD", "NEIGHBOUR", "A person where you live"],
+      ["PROCRASTINATE", "DAYDREAM", "What you do instead of working"]
+    ],
+    C1: [
+      ["IMPOSTOR SYNDROME", "BURNOUT", "Something people feel at work"],
+      ["GENTRIFICATION", "URBAN SPRAWL", "A change in a city"],
+      ["SMALL TALK", "BANTER", "A type of conversation"],
+      ["WHISTLEBLOWER", "SCAPEGOAT", "A role a person is given"],
+      ["ECHO CHAMBER", "RUMOUR MILL", "Somewhere ideas spread"],
+      ["SERENDIPITY", "COINCIDENCE", "A lucky moment"],
+      ["RED TAPE", "LOOPHOLE", "Something inside a system"],
+      ["CULTURE SHOCK", "HOMESICKNESS", "What travellers experience"]
+    ]
+  };
+
+  state = {
+    phase: "setup",
+    level: this.props.startingLevel || "B1",
+    names: Array.from({ length: this.props.startingPlayers || 6 }, (_, i) => "Player " + (i + 1)),
+    impostorCount: 1,
+    sees: this.props.impostorSees || "decoy",
+    clueSecs: this.props.clueSeconds || 90,
+    discussSecs: this.props.discussSeconds || 120,
+    round: 0,
+    scores: [],
+    used: [],
+    entry: null,
+    impostors: [],
+    dealIndex: 0,
+    cardShown: false,
+    spoken: [],
+    vote: null,
+    guessed: false,
+    timeLeft: 0,
+    running: false
+  };
+
+  componentDidMount() {
+    this.onKey = (e) => {
+      if (e.target && /input|textarea/i.test(e.target.tagName)) return;
+      if (e.key === " " || e.key === "ArrowRight" || e.key === "Enter") {
+        e.preventDefault();
+        this.advance();
+      }
+    };
+    window.addEventListener("keydown", this.onKey);
+    this.tick = setInterval(() => {
+      if (this.state.running && this.state.timeLeft > 0) {
+        this.setState((s) => ({ timeLeft: s.timeLeft - 1, running: s.timeLeft - 1 > 0 }));
+      }
+    }, 1000);
+  }
+  componentWillUnmount() {
+    window.removeEventListener("keydown", this.onKey);
+    clearInterval(this.tick);
+  }
+
+  pool() {
+    const lv = this.state.level;
+    if (lv === "Mixed") return Object.keys(this.packs).reduce((a, k) => a.concat(this.packs[k]), []);
+    return this.packs[lv] || this.packs.B1;
+  }
+
+  startRound = () => {
+    const pool = this.pool();
+    let left = pool.filter((e) => this.state.used.indexOf(e[0]) === -1);
+    let used = this.state.used;
+    if (!left.length) { left = pool; used = []; }
+    const entry = left[Math.floor(Math.random() * left.length)];
+    const n = this.state.names.length;
+    const idx = Array.from({ length: n }, (_, i) => i);
+    for (let i = idx.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const t = idx[i]; idx[i] = idx[j]; idx[j] = t;
+    }
+    const count = Math.min(this.state.impostorCount, Math.max(1, n - 2));
+    this.setState({
+      phase: "deal",
+      entry,
+      used: used.concat([entry[0]]),
+      impostors: idx.slice(0, count),
+      dealIndex: 0,
+      cardShown: false,
+      spoken: [],
+      vote: null,
+      guessed: false,
+      running: false,
+      timeLeft: 0,
+      round: this.state.round + 1
+    });
+  };
+
+  advance = () => {
+    const s = this.state;
+    if (s.phase === "setup") return this.startRound();
+    if (s.phase === "deal") return s.cardShown ? this.nextCard() : this.setState({ cardShown: true });
+    if (s.phase === "clue") return this.toDiscuss();
+    if (s.phase === "discuss") return this.toVote();
+    if (s.phase === "vote") return this.toReveal();
+    if (s.phase === "reveal") return this.nextRound();
+    if (s.phase === "scores") return this.nextRound();
+  };
+
+  nextCard = () => {
+    const next = this.state.dealIndex + 1;
+    if (next >= this.state.names.length) {
+      this.setState({ phase: "clue", cardShown: false, timeLeft: this.state.clueSecs, running: true });
+    } else {
+      this.setState({ dealIndex: next, cardShown: false });
+    }
+  };
+
+  toDiscuss = () => this.setState({ phase: "discuss", timeLeft: this.state.discussSecs, running: true });
+  toVote = () => this.setState({ phase: "vote", running: false });
+
+  toReveal = () => {
+    const s = this.state;
+    const caught = s.vote !== null && s.impostors.indexOf(s.vote) !== -1;
+    const scores = s.names.map((_, i) => s.scores[i] || 0);
+    s.names.forEach((_, i) => {
+      const isImp = s.impostors.indexOf(i) !== -1;
+      if (caught && !isImp) scores[i] += 1;
+      if (!caught && isImp) scores[i] += 2;
+    });
+    this.setState({ phase: "reveal", scores, running: false });
+  };
+
+  toggleGuess = () => {
+    const s = this.state;
+    const scores = s.scores.slice();
+    const d = s.guessed ? -1 : 1;
+    s.impostors.forEach((i) => { scores[i] = (scores[i] || 0) + d; });
+    this.setState({ guessed: !s.guessed, scores });
+  };
+
+  nextRound = () => this.startRound();
+  goScores = () => this.setState({ phase: "scores" });
+  goSetup = () => this.setState({ phase: "setup", running: false });
+  resetScores = () => this.setState({ scores: [], round: 0, used: [] });
+  toggleTimer = () => this.setState((s) => ({ running: !s.running, timeLeft: s.timeLeft > 0 ? s.timeLeft : (s.phase === "clue" ? s.clueSecs : s.discussSecs) }));
+
+  setNames = (n) => {
+    const names = this.state.names.slice(0, n);
+    while (names.length < n) names.push("Player " + (names.length + 1));
+    this.setState({ names });
+  };
+
+  opts(list, current, pick) {
+    return list.map((o) => ({
+      id: o.id, label: o.label,
+      border: o.id === current ? "#9184d9" : "#3f424d",
+      color: o.id === current ? "#d2cefd" : "rgba(233,233,237,0.7)",
+      pick: () => pick(o.id)
+    }));
+  }
+
+  fmt(t) {
+    const m = Math.floor(t / 60), s = t % 60;
+    return m + ":" + (s < 10 ? "0" : "") + s;
+  }
+
+  renderVals() {
+    const s = this.state;
+    const e = s.entry || ["", "", ""];
+    const phaseNames = { setup: "Setup", deal: "Dealing cards", clue: "Clue round", discuss: "Discussion", vote: "Vote", reveal: "Reveal", scores: "Scores" };
+    const dealIsImp = s.impostors.indexOf(s.dealIndex) !== -1;
+    const showDecoy = s.sees === "decoy" || s.sees === "both";
+    const showHint = s.sees === "hint" || s.sees === "both";
+    const caught = s.vote !== null && s.impostors.indexOf(s.vote) !== -1;
+    const impNames = s.impostors.map((i) => s.names[i] || "Player " + (i + 1));
+    const maxScore = Math.max(1, ...s.names.map((_, i) => s.scores[i] || 0));
+
+    return {
+      phaseLabel: phaseNames[s.phase],
+      roundLabel: s.round || "—",
+      levelLabel: s.level,
+      isSetup: s.phase === "setup",
+      isDeal: s.phase === "deal",
+      isClue: s.phase === "clue",
+      isDiscuss: s.phase === "discuss",
+      isVote: s.phase === "vote",
+      isReveal: s.phase === "reveal",
+      isScores: s.phase === "scores",
+      goSetup: this.goSetup,
+      goScores: this.goScores,
+      startRound: this.startRound,
+      nextRound: this.nextRound,
+      resetScores: this.resetScores,
+      toDiscuss: this.toDiscuss,
+      toVote: this.toVote,
+      toReveal: this.toReveal,
+      toggleTimer: this.toggleTimer,
+      toggleGuess: this.toggleGuess,
+
+      playerCount: s.names.length,
+      players: s.names.map((n, i) => ({
+        num: i + 1, name: n,
+        onInput: (ev) => {
+          const v = ev.target.value;
+          const names = s.names.slice(); names[i] = v;
+          this.setState({ names });
+        }
+      })),
+      morePlayers: () => this.setNames(Math.min(20, s.names.length + 1)),
+      fewerPlayers: () => this.setNames(Math.max(3, s.names.length - 1)),
+      levelOpts: this.opts(["A1", "A2", "B1", "B2", "C1", "Mixed"].map((id) => ({ id, label: id })), s.level, (id) => this.setState({ level: id, used: [] })),
+      impOpts: this.opts([{ id: 1, label: "1" }, { id: 2, label: "2" }], s.impostorCount, (id) => this.setState({ impostorCount: id })),
+      seeOpts: this.opts([{ id: "decoy", label: "A decoy word" }, { id: "hint", label: "A vague hint" }, { id: "both", label: "Both" }], s.sees, (id) => this.setState({ sees: id })),
+      clueOpts: this.opts([{ id: 60, label: "1 min" }, { id: 90, label: "1:30" }, { id: 120, label: "2 min" }], s.clueSecs, (id) => this.setState({ clueSecs: id })),
+      discussOpts: this.opts([{ id: 90, label: "1:30" }, { id: 120, label: "2 min" }, { id: 180, label: "3 min" }], s.discussSecs, (id) => this.setState({ discussSecs: id })),
+
+      dealPos: s.dealIndex + 1,
+      dealNum: s.dealIndex + 1,
+      dealName: s.names[s.dealIndex] || "",
+      dealHidden: !s.cardShown,
+      dealShown: s.cardShown,
+      flipCard: () => this.setState({ cardShown: true }),
+      nextCard: this.nextCard,
+      nextCardLabel: s.dealIndex + 1 >= s.names.length ? "Hide — start the round" : "Hide and call the next number",
+      cardRole: dealIsImp ? "You are the impostor" : "Everyone's word",
+      cardWord: dealIsImp ? (showDecoy ? e[1] : "?") : e[0],
+      cardHint: dealIsImp && showHint ? e[2] : null,
+      cardBorder: dealIsImp ? "#9184d9" : "#595d6c",
+      cardBg: dealIsImp ? "#2b2741" : "#232532",
+      cardKicker: dealIsImp ? "#b5abfc" : "rgba(233,233,237,0.45)",
+
+      timeLabel: this.fmt(s.timeLeft),
+      timerColor: s.timeLeft === 0 ? "#b5abfc" : "#e9e9ed",
+      timerBtn: s.running ? "Pause" : "Start timer",
+      clueList: s.names.map((n, i) => {
+        const done = s.spoken.indexOf(i) !== -1;
+        return {
+          num: i + 1, name: n, mark: done ? "spoken" : "",
+          border: done ? "#3f424d" : "#595d6c",
+          bg: done ? "transparent" : "rgba(35,37,50,0.7)",
+          color: done ? "rgba(233,233,237,0.35)" : "#e9e9ed",
+          tap: () => {
+            const sp = s.spoken.slice();
+            const at = sp.indexOf(i);
+            if (at === -1) sp.push(i); else sp.splice(at, 1);
+            this.setState({ spoken: sp });
+          }
+        };
+      }),
+
+      voteHelp: s.vote === null ? "Tap the name the class accuses." : "Tap Reveal when the class has decided.",
+      voteList: s.names.map((n, i) => ({
+        num: i + 1, name: n,
+        border: s.vote === i ? "#9184d9" : "#3f424d",
+        bg: s.vote === i ? "#2b2741" : "rgba(35,37,50,0.55)",
+        color: s.vote === i ? "#d2cefd" : "#e9e9ed",
+        tap: () => this.setState({ vote: i })
+      })),
+
+      verdict: caught ? "The class was right" : "The impostor got away",
+      verdictColor: caught ? "#b5abfc" : "rgba(233,233,237,0.55)",
+      impostorLine: impNames.length > 1 ? impNames.join(" and ") + " were the impostors." : impNames[0] + " was the impostor.",
+      word: e[0],
+      decoy: e[1],
+      guessLabel: s.guessed ? "Impostor guessed the word ✓" : "Impostor guessed the word?",
+      guessBorder: s.guessed ? "#9184d9" : "#3f424d",
+      guessColor: s.guessed ? "#d2cefd" : "rgba(233,233,237,0.7)",
+      roundLines: s.names.map((n, i) => {
+        const isImp = s.impostors.indexOf(i) !== -1;
+        let d = 0;
+        if (caught && !isImp) d = 1;
+        if (!caught && isImp) d = 2;
+        if (isImp && s.guessed) d += 1;
+        return { name: n + (isImp ? " · impostor" : ""), delta: d > 0 ? "+" + d : "—", color: d > 0 ? "#b5abfc" : "rgba(233,233,237,0.35)" };
+      }),
+
+      scoreRows: s.names
+        .map((n, i) => ({ name: n, score: s.scores[i] || 0 }))
+        .sort((a, b) => b.score - a.score)
+        .map((r, i) => ({ rank: i + 1, name: r.name, score: r.score, pct: Math.round((r.score / maxScore) * 100) + "%" }))
+    };
+  }
+}
+</script>
+</body>
+</html>
