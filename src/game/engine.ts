@@ -49,7 +49,25 @@ export function hello(s: HostState, id: string, name: string, look: Look, teache
 }
 
 function newPlayer(id: string, name: string, look: Look, alive: boolean, teacher: boolean): PlayerState {
-  return { id, name: sanitizeName(name), look: sanitizeLook(look), connected: true, alive, role: "crew", tasks: [], done: [], emergencyLeft: 0, killReadyAt: 0, score: 0, teacher: !!teacher };
+  return { id, name: sanitizeName(name), look: sanitizeLook(look), connected: true, alive, role: "crew", tasks: [], done: [], emergencyLeft: 0, killReadyAt: 0, score: 0, teacher: !!teacher, earned: {} };
+}
+
+/* every point goes to the session scoreboard and to this game's ledger */
+export const POINTS = { mission: 1, vote: 1, report: 1, fix: 1, elimination: 1, survive: 1, crewWin: 2, impostorWin: 3 };
+function award(p: PlayerState, reason: string, n: number) {
+  p.score += n;
+  p.earned = p.earned || {};
+  p.earned[reason] = (p.earned[reason] || 0) + n;
+}
+export const earnedTotal = (p: PlayerState) => Object.values(p.earned || {}).reduce((a, b) => a + b, 0);
+
+/* called once when a game reaches the end screen: survival bonus + reward messages */
+export function endRewards(s: HostState): Out[] {
+  s.players.forEach((p) => { if (p.alive && p.tasks.length) award(p, "survive", POINTS.survive); });
+  return s.players.map((p) => ({
+    to: p.id,
+    msg: { k: "reward", id: `${s.code}-${s.round}`, points: earnedTotal(p), items: { ...(p.earned || {}) } } as FromHost
+  }));
 }
 
 export function setLook(s: HostState, id: string, name: string, look: Look) {
@@ -104,6 +122,7 @@ export function startGame(s: HostState, now: number): Out[] {
     p.done = [];
     p.emergencyLeft = st.emergencies;
     p.killReadyAt = now + REVEAL_MS + START_COOLDOWN_MS;
+    p.earned = {};
   });
   s.phase = "reveal";
   s.phaseEndsAt = now + REVEAL_MS;
@@ -153,6 +172,7 @@ export function kill(s: HostState, killerId: string, targetId: string, pos: Posi
   s.lastKill = { x: bx, y: by, at: now, victim: t.id };
   k.killReadyAt = now + s.settings.killCooldown * 1000;
   s.log.push(`${k.name} eliminated ${t.name}`);
+  award(k, "elimination", POINTS.elimination);
   /* like the original: the killer snaps onto the victim's spot */
   kp.x = bx; kp.y = by;
   const out: Out[] = [
@@ -169,6 +189,7 @@ export function report(s: HostState, reporter: string, bodyId: string, pos: Posi
   const r = P(s, reporter), b = s.bodies.find((x) => x.id === bodyId);
   const rp = pos[reporter];
   if (!r || !r.alive || !b || !rp || dist(rp, b) > RANGE.report + 60) return [];
+  award(r, "report", POINTS.report);
   return startMeeting(s, reporter, "report", now, bodyId);
 }
 
@@ -200,6 +221,7 @@ export function taskDone(s: HostState, id: string, station: string, now: number)
   const p = P(s, id);
   if (!p || p.tasks.indexOf(station) === -1 || p.done.indexOf(station) !== -1) return [];
   p.done.push(station);
+  if (p.role === "crew") award(p, "mission", POINTS.mission);
   const out: Out[] = [{ to: id, msg: { k: "secret", s: secretFor(s, id, now) } }];
   checkWin(s, now);
   return out;
@@ -256,7 +278,7 @@ function doEject(s: HostState, now: number): Out[] {
   /* one point for every vote that pointed at a real impostor */
   Object.entries(s.meeting?.votes || {}).forEach(([voter, target]) => {
     const t = P(s, target), v = P(s, voter);
-    if (t && v && t.role === "impostor" && v.role === "crew") v.score += 1;
+    if (t && v && t.role === "impostor" && v.role === "crew") award(v, "vote", POINTS.vote);
   });
   s.eject = { id: ej ? ej.id : null, wasImpostor: !!ej && ej.role === "impostor", tie: r.tie, tally: r.tally };
   s.phase = "eject";
@@ -281,8 +303,8 @@ export function checkWin(s: HostState, now: number) {
   s.phaseEndsAt = now;
   s.meeting = null;
   s.players.forEach((p) => {
-    if (w === "crew" && p.role === "crew") p.score += 2;
-    if (w === "impostor" && p.role === "impostor") p.score += 3;
+    if (w === "crew" && p.role === "crew") award(p, "win", POINTS.crewWin);
+    if (w === "impostor" && p.role === "impostor") award(p, "win", POINTS.impostorWin);
   });
 }
 
@@ -315,6 +337,7 @@ function fixed(s: HostState, now: number) {
 export function fixLights(s: HostState, id: string, pos: Positions, now: number): Out[] {
   const p = P(s, id), pp = pos[id];
   if (!p || !p.alive || s.sabotage?.kind !== "lights" || !pp || dist(pp, FUSE) > RANGE.fix + 60) return [];
+  if (p.role === "crew") award(p, "fix", POINTS.fix);
   fixed(s, now);
   return [];
 }
@@ -326,7 +349,10 @@ export function hold(s: HostState, id: string, panel: string, on: boolean, pos: 
   const list = (sb.holds[panel] || []).filter((x) => x !== id);
   if (on && pp && dist(pp, pn) <= RANGE.fix + 60) list.push(id);
   sb.holds[panel] = list;
-  if (ALARM_PANELS.every((x) => (sb.holds[x.id] || []).length > 0)) fixed(s, now);
+  if (ALARM_PANELS.every((x) => (sb.holds[x.id] || []).length > 0)) {
+    new Set(Object.values(sb.holds).flat()).forEach((hid) => { const h = P(s, hid); if (h && h.role === "crew") award(h, "fix", POINTS.fix); });
+    fixed(s, now);
+  }
   return [];
 }
 
@@ -352,7 +378,7 @@ export function tick(s: HostState, now: number, pos: Positions = {}): Out[] {
       s.winReason = "alarm";
       s.phase = "end";
       s.phaseEndsAt = now;
-      s.players.forEach((p) => { if (p.role === "impostor") p.score += 3; });
+      s.players.forEach((p) => { if (p.role === "impostor") award(p, "win", POINTS.impostorWin); });
       return [];
     }
   }
@@ -415,6 +441,7 @@ export function publicState(s: HostState, now: number): PublicState {
     settings: s.settings,
     players: s.players.map((p) => ({
       id: p.id, name: p.name, look: p.look, alive: p.alive, connected: p.connected, score: p.score, teacher: p.teacher,
+      earned: s.phase === "end" ? earnedTotal(p) : undefined,
       role: showRoles || (s.eject && s.eject.id === p.id && s.phase === "eject") ? p.role : undefined
     })),
     bodies: s.bodies,

@@ -3,6 +3,7 @@ import { Lingo, LingoBadge, useClock } from "./game/Character";
 import type { Look } from "./game/types";
 import { sfx, unlockAudio } from "./game/sfx";
 import type { Lang } from "./shared/proximity";
+import { Fit } from "./shared/Fit";
 
 const S = {
   en: {
@@ -49,9 +50,11 @@ const CROWD: Look[] = [
 /* characters strolling across the bottom of the hero; one of them is sus */
 function Parade() {
   const t = useClock(true, 30);
-  const W = Math.round(Math.max(640, Math.min(1600, window.innerWidth * 1.25)));
+  /* match the strip's aspect ratio so nobody's hat gets cropped */
+  const stripH = Math.min(window.innerHeight * 0.22, 200);
+  const W = Math.round(170 * (window.innerWidth / Math.max(60, stripH)));
   return (
-    <svg viewBox={`0 -150 ${W} 170`} preserveAspectRatio="xMidYMax slice" style={{ position: "absolute", left: 0, right: 0, bottom: 0, width: "100%", height: "min(26vh,220px)", pointerEvents: "none" }}>
+    <svg viewBox={`0 -150 ${W} 170`} preserveAspectRatio="xMidYMax meet" style={{ flex: "none", display: "block", width: "100%", height: stripH, pointerEvents: "none" }}>
       <rect x={0} y={0} width={W} height={20} fill="url(#homeFloor)" />
       <defs>
         <pattern id="homeFloor" width="56" height="20" patternUnits="userSpaceOnUse">
@@ -67,7 +70,7 @@ function Parade() {
           <g key={i} transform={`translate(${x},${4}) scale(1.05)`}>
             <Lingo look={look} moving={!stop} dir={stop ? -1 : 1} t={t} seed={"home" + i} />
             {stop && (
-              <g transform="translate(26 -150)">
+              <g transform="translate(54 -104)">
                 <rect x={-22} y={-26} width={44} height={36} rx={10} fill="#f2efe6" stroke="#0e1113" strokeWidth={4} />
                 <path d="M -6 9 L -12 20 L 4 9" fill="#f2efe6" stroke="#0e1113" strokeWidth={4} strokeLinejoin="round" />
                 <text y={2} textAnchor="middle" fontSize={26} fontWeight={900} fontFamily="Arial, sans-serif" fill="#e23d4f">?!</text>
@@ -86,23 +89,24 @@ export function Home({ lang, setLang, go }: { lang: Lang; setLang: (l: Lang) => 
   const [code, setCode] = useState("");
 
   return (
-    <div className="page" style={{ position: "relative", overflow: "hidden", minHeight: "100dvh" }}>
+    <div className="page" style={{ position: "relative" }}>
       <div className="hazard" style={{ borderTop: 0, borderBottom: "3px solid #0e1113" }} />
       <div style={{ position: "absolute", top: 22, right: 18, display: "flex", gap: 8, zIndex: 3 }}>
+        <button type="button" className="btn btn-y btn-hdr" onClick={() => go("/badges")}>🏅 {lang === "es" ? "Insignias" : "Badges"}</button>
         <button type="button" className="btn btn-s btn-hdr" onClick={() => setLang(lang === "es" ? "en" : "es")}>{lang === "es" ? "English" : "Español"}</button>
       </div>
       <div style={{ position: "absolute", inset: 0, background: "radial-gradient(900px 520px at 50% 38%, rgba(245,197,24,0.12), transparent 70%)", pointerEvents: "none" }} />
 
       {step === "hero" ? (
-        <div style={{ position: "relative", zIndex: 2, flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", padding: "40px 16px calc(min(26vh,220px) + 24px)", gap: 18 }}>
+        <Fit key="hero"><div style={{ position: "relative", zIndex: 2, display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", padding: "56px 16px 16px", gap: "min(18px,2.2vh)" }}>
           <div className="kicker">{T.kicker}</div>
-          <h1 style={{ margin: 0, font: "400 clamp(64px,15vw,210px) 'Archivo Black',sans-serif", lineHeight: 0.86, letterSpacing: "-0.02em", textTransform: "uppercase", color: "#f5c518", textShadow: "6px 6px 0 #0e1113, 12px 12px 0 rgba(14,17,19,0.35)", WebkitTextStroke: "3px #0e1113", animation: "stampIn .6s cubic-bezier(.2,1.5,.4,1) both" }}>
+          <h1 style={{ margin: 0, font: "400 clamp(54px,min(15vw,21vh),210px) 'Archivo Black',sans-serif", lineHeight: 0.86, letterSpacing: "-0.02em", textTransform: "uppercase", color: "#f5c518", textShadow: "6px 6px 0 #0e1113, 12px 12px 0 rgba(14,17,19,0.35)", WebkitTextStroke: "3px #0e1113", animation: "stampIn .6s cubic-bezier(.2,1.5,.4,1) both" }}>
             Impostor
           </h1>
-          <div style={{ font: "400 clamp(20px,3.2vw,40px) 'Archivo Black',sans-serif", textTransform: "uppercase", textShadow: "3px 3px 0 #0e1113" }}>{T.slogan}</div>
+          <div style={{ font: "400 clamp(20px,min(3.2vw,4.6vh),40px) 'Archivo Black',sans-serif", textTransform: "uppercase", textShadow: "3px 3px 0 #0e1113" }}>{T.slogan}</div>
           <div style={{ font: "700 clamp(12px,1.3vw,15px) 'Space Mono',monospace", letterSpacing: "0.16em", textTransform: "uppercase", color: "rgba(242,239,230,0.6)" }}>{T.sub}</div>
           <button type="button" className="btn btn-y" onClick={() => { unlockAudio(); sfx.pop(); setStep("modes"); }}
-            style={{ marginTop: 10, padding: "22px 44px", font: "400 clamp(20px,2.4vw,28px) 'Archivo Black',sans-serif", boxShadow: "0 8px 0 #0e1113", animation: "floaty 3s ease-in-out infinite" }}>
+            style={{ marginTop: 10, padding: "min(22px,2.6vh) 44px", font: "400 clamp(20px,min(2.4vw,3.4vh),28px) 'Archivo Black',sans-serif", boxShadow: "0 8px 0 #0e1113", animation: "floaty 3s ease-in-out infinite" }}>
             ▶ {T.setup}
           </button>
           <form onSubmit={(e) => { e.preventDefault(); if (code.length >= 4) go("/join/" + code); }} style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, flexWrap: "wrap", justifyContent: "center" }}>
@@ -111,9 +115,9 @@ export function Home({ lang, setLang, go }: { lang: Lang; setLang: (l: Lang) => 
               className="field" style={{ width: 150, padding: "8px 10px", font: "400 18px 'Archivo Black',sans-serif", letterSpacing: "0.2em", textAlign: "center" }} />
             <button type="submit" className="btn btn-s btn-sm" disabled={code.length < 4}>{T.go}</button>
           </form>
-        </div>
+        </div></Fit>
       ) : (
-        <div style={{ position: "relative", zIndex: 2, flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "60px 16px calc(min(26vh,220px) + 24px)", gap: 22 }}>
+        <Fit key="modes"><div style={{ position: "relative", zIndex: 2, display: "flex", flexDirection: "column", alignItems: "center", padding: "64px 16px 16px", gap: 22 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 14, width: "min(1100px,100%)" }}>
             <button type="button" className="btn btn-s btn-sm" onClick={() => setStep("hero")}>{T.back}</button>
             <h2 className="h2" style={{ margin: 0 }}>{T.choose}</h2>
@@ -122,7 +126,7 @@ export function Home({ lang, setLang, go }: { lang: Lang; setLang: (l: Lang) => 
             <ModeCard title={T.classic} text={T.classicP} tag={T.classicTag} color="#f5c518" looks={[CROWD[0], CROWD[1], CROWD[3]]} onClick={() => go("/classic")} icon="📽" />
             <ModeCard title={T.video} text={T.videoP} tag={T.videoTag} color="#f07a1a" looks={[CROWD[2], CROWD[4], CROWD[5]]} onClick={() => go("/host")} icon="🎮" />
           </div>
-        </div>
+        </div></Fit>
       )}
       <Parade />
     </div>
@@ -132,7 +136,7 @@ export function Home({ lang, setLang, go }: { lang: Lang; setLang: (l: Lang) => 
 function ModeCard({ title, text, tag, color, looks, onClick, icon }: { title: string; text: string; tag: string; color: string; looks: Look[]; onClick: () => void; icon: string }) {
   return (
     <button type="button" onClick={onClick} className="plate"
-      style={{ textAlign: "left", color: "#f2efe6", cursor: "pointer", display: "flex", flexDirection: "column", gap: 12, padding: "22px 22px 24px", animation: "popIn .35s", transition: "transform .12s" }}
+      style={{ textAlign: "left", whiteSpace: "normal", minWidth: 0, color: "#f2efe6", cursor: "pointer", display: "flex", flexDirection: "column", gap: 12, padding: "22px 22px 24px", animation: "popIn .35s", transition: "transform .12s" }}
       onMouseEnter={(e) => (e.currentTarget.style.transform = "translateY(-4px)")} onMouseLeave={(e) => (e.currentTarget.style.transform = "none")}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <span className="tag" style={{ color }}>{tag}</span>

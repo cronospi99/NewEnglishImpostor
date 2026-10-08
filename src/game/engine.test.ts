@@ -182,6 +182,21 @@ describe("engine", () => {
     expect(s.meeting!.chat.map((c) => c.text)).toEqual(["I suspect Luis."]);
   });
 
+  it("awards points through the game and sends one reward per player at the end", () => {
+    const s = game(4);
+    const crew = s.players.filter((p) => p.role === "crew");
+    crew.forEach((p) => p.tasks.forEach((t) => E.taskDone(s, p.id, t, 9000)));
+    expect(s.phase).toBe("end");
+    const outs = E.endRewards(s);
+    expect(outs).toHaveLength(4);
+    const c = outs.find((o) => o.to === crew[0].id)!.msg as { k: string; points: number; items: Record<string, number> };
+    expect(c.k).toBe("reward");
+    expect(c.items.mission).toBe(crew[0].tasks.length);
+    expect(c.items.win).toBe(E.POINTS.crewWin);
+    expect(c.items.survive).toBe(1);
+    expect(c.points).toBe(crew[0].tasks.length + E.POINTS.crewWin + 1);
+  });
+
   it("teacher can join as a regular player", () => {
     const s = E.createState("ABCD");
     E.hello(s, "t1", "Teacher", look, true);

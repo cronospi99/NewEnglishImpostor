@@ -5,6 +5,7 @@ import { studentProximity, countWords, band as bandOf, type Lang } from "../shar
 import { wordPool, type LevelOpt } from "../shared/pool";
 import { load, save } from "../shared/storage";
 import { Header } from "../shared/Header";
+import { Fit } from "../shared/Fit";
 
 type Phase = "setup" | "deal" | "clue" | "discuss" | "vote" | "reveal" | "scores";
 type HistoryRow = { round: number; word: string; impostors: number[]; votes: number[]; accused: number | null; caught: boolean };
@@ -273,15 +274,16 @@ export function ClassicGame({ lang, setLang, onExit }: { lang: Lang; setLang: (l
           { label: s.lang === "es" ? "Inicio" : "Home", onClick: onExit }
         ]}
       />
+      <Fit>
 
       {s.phase === "setup" && (
         <div className="stack-sm pad-sm" style={{ flex: 1, padding: "38px 30px 34px", display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(min(380px,100%),1.15fr)", gap: 44, alignItems: "start", maxWidth: 1560 }}>
           <div>
             <div className="kicker" style={{ marginBottom: 16 }}>{T.kicker}</div>
             <h1 className="h1">{T.h1a}<br />{T.h1b}</h1>
-            <p className="lead">{T.intro1}</p>
-            <p className="lead" style={{ marginBottom: 28 }}>{T.intro2}</p>
-            <div className="plate" style={{ maxWidth: "40ch", padding: "20px 22px" }}>
+            <p className="lead hide-sm">{T.intro1}</p>
+            <p className="lead hide-sm" style={{ marginBottom: 28 }}>{T.intro2}</p>
+            <div className="plate hide-sm" style={{ maxWidth: "40ch", padding: "20px 22px" }}>
               <div className="lbl lbl-y" style={{ marginBottom: 10 }}>{T.boardTitle}</div>
               <div style={{ fontSize: 17, lineHeight: 1.85, color: "rgba(242,239,230,0.9)" }}>
                 {T.board1a} <em style={{ color: "#f5c518", fontStyle: "normal", fontWeight: 700 }}>{T.board1b}</em>{T.board1c}<br />{T.board2}<br />{T.board3}
@@ -608,6 +610,7 @@ export function ClassicGame({ lang, setLang, onExit }: { lang: Lang; setLang: (l
           </div>
         </div>
       )}
+      </Fit>
     </div>
   );
 }

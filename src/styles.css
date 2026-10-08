@@ -1,5 +1,5 @@
 *,*::before,*::after{box-sizing:border-box}
-html,body,#root{height:100%}
+html,body,#root{height:100%;overflow:hidden;overscroll-behavior:none}
 body{margin:0;background:#22282c;color:#f2efe6;font-family:Archivo,system-ui,sans-serif;-webkit-tap-highlight-color:transparent}
 a{color:#f5c518;text-underline-offset:3px}
 a:hover{color:#ffe06a}
@@ -20,12 +20,13 @@ button[disabled]{opacity:0.35;cursor:not-allowed;box-shadow:none}
 @keyframes shakeB{0%,100%{transform:translateX(0)}25%{transform:translateX(-3px)}75%{transform:translateX(3px)}}
 @keyframes confetti{0%{transform:translateY(0) rotate(0);opacity:1}100%{transform:translateY(240px) rotate(540deg);opacity:0}}
 @keyframes floaty{0%,100%{transform:translateY(0) rotate(-2deg)}50%{transform:translateY(-10px) rotate(2deg)}}
+@keyframes cardFlip{0%{transform:perspective(800px) rotateY(180deg) scale(.4);opacity:0}60%{transform:perspective(800px) rotateY(-12deg) scale(1.08);opacity:1}100%{transform:perspective(800px) rotateY(0) scale(1)}}
 @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes popIn{0%{transform:scale(.6);opacity:0}70%{transform:scale(1.06);opacity:1}100%{transform:scale(1)}}
 @keyframes flyOut{0%{transform:translate(-60vw,0) rotate(0)}100%{transform:translate(60vw,0) rotate(720deg)}}
 
-.page{min-height:100vh;display:flex;flex-direction:column;background:#22282c;background-image:radial-gradient(1200px 700px at 12% -10%, #333c42 0%, #22282c 60%),url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="6" height="6"><circle cx="1" cy="1" r="0.6" fill="rgba(255,255,255,0.045)"/></svg>');color:#f2efe6}
+.page{height:100vh;height:100dvh;overflow:hidden;display:flex;flex-direction:column;background:#22282c;background-image:radial-gradient(1200px 700px at 12% -10%, #333c42 0%, #22282c 60%),url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="6" height="6"><circle cx="1" cy="1" r="0.6" fill="rgba(255,255,255,0.045)"/></svg>');color:#f2efe6}
 
 /* header */
 .hdr{position:relative;border-bottom:3px solid #0e1113;background:linear-gradient(#3b4349,#2b3236)}
@@ -84,3 +85,16 @@ button[disabled]{opacity:0.35;cursor:not-allowed;box-shadow:none}
   .stack-sm{grid-template-columns:minmax(0,1fr)!important}
   .pad-sm{padding-left:16px!important;padding-right:16px!important}
 }
+
+/* phone in landscape: put long screens side by side instead of shrinking them */
+.cust{display:grid;grid-template-columns:minmax(0,1fr);gap:16px}
+.mtg{display:flex;flex-direction:column;gap:14px}
+.mtg-col{display:flex;flex-direction:column;gap:14px;min-width:0}
+@media (orientation:landscape) and (max-height:560px){
+  .cust{grid-template-columns:minmax(0,0.85fr) minmax(0,1.15fr);grid-template-areas:"lbl hat" "prev hat" "color face" "btns extra";max-width:960px!important;column-gap:22px;row-gap:12px}
+  .c-lbl{grid-area:lbl}.c-prev{grid-area:prev}.c-color{grid-area:color}.c-hat{grid-area:hat}.c-face{grid-area:face}.c-extra{grid-area:extra}.c-btns{grid-area:btns}
+  .mtg{flex-direction:row;align-items:flex-start}
+  .mtg>.mtg-col:first-child{flex:1.25}
+  .mtg>.mtg-col:last-child{flex:1}
+}
+@media (max-width:720px),(max-height:560px){ .hide-sm{display:none!important} }

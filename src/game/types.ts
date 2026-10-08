@@ -63,6 +63,8 @@ export interface PlayerState {
   killReadyAt: number; // host clock ms
   score: number;
   teacher: boolean;
+  /* points earned in the current game, by reason */
+  earned: Record<string, number>;
 }
 
 export interface Body {
@@ -134,6 +136,8 @@ export interface PublicPlayer {
   connected: boolean;
   score: number;
   teacher: boolean;
+  /* points earned this game — only sent once the game is over */
+  earned?: number;
   /* revealed only when the game has ended or the player was ejected */
   role?: Role;
 }
@@ -190,7 +194,8 @@ export type FromHost =
   | { k: "secret"; s: Secret }
   | { k: "teleport"; x: number; y: number }
   | { k: "killed"; by?: string }
-  | { k: "toast"; text: string };
+  | { k: "toast"; text: string }
+  | { k: "reward"; id: string; points: number; items: Record<string, number> };
 
 /* players broadcast their position straight to everyone (host included) */
 export type PosMsg = { k: "pos"; x: number; y: number; dir: number; m: boolean; v?: string };

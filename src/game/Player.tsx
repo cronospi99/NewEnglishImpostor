@@ -13,6 +13,9 @@ import { Center, Countdown, EjectScene, EndScreen, MeetingBoard, TaskBar } from 
 import { ChatFeed, KillScreen, MeetingSplash, SoundToggle } from "./ui";
 import { sfx, startSiren, stopSiren, unlockAudio } from "./sfx";
 import { load, save } from "../shared/storage";
+import { Fit } from "../shared/Fit";
+import { addPoints } from "../badges/progress";
+import { BadgeAlbum, CardReveal } from "../badges/Cards";
 import type { Lang } from "../shared/proximity";
 
 type Other = { x: number; y: number; dir: number; m: boolean; dx: number; dy: number; at: number; v?: string };
@@ -39,6 +42,9 @@ export function Player({ code, onExit }: { code: string; onExit: () => void }) {
   const [toast, setToast] = useState("");
   const [killedBy, setKilledBy] = useState<string | null>(null);
   const [splash, setSplash] = useState<{ reason: string; caller: string; victim?: string } | null>(null);
+  const [reward, setReward] = useState<{ points: number; items: Record<string, number> } | null>(null);
+  const [reveal, setReveal] = useState<string[]>([]);
+  const [album, setAlbum] = useState(false);
   const relay = useRef<Relay | null>(null);
   const others = useRef<Record<string, Other>>({});
   const emotes = useRef<Record<string, { e: string; at: number }>>({});
@@ -91,6 +97,13 @@ export function Player({ code, onExit }: { code: string; onExit: () => void }) {
         if (pubRef.current?.phase === "play") { setKilledBy(m.by || ""); sfx.killed(); setTimeout(() => setKilledBy(null), 3200); }
       }
       if (m.k === "toast") { setToast(m.text); setTimeout(() => setToast(""), 3500); }
+      if (m.k === "reward") {
+        const r = addPoints(m.id, m.points);
+        if (!r.duplicate) {
+          setReward({ points: m.points, items: m.items });
+          if (r.unlocked.length) setTimeout(() => setReveal(r.unlocked), 3200);
+        }
+      }
     });
     return () => { off(); offS(); r.close(); };
   }, [joined, code, id]);
@@ -145,17 +158,27 @@ export function Player({ code, onExit }: { code: string; onExit: () => void }) {
     return <Customize T={T} lang={lang} code={code} name={name} setName={setName} look={look} setLook={setLook} onSave={saveProfile} joined={joined} onExit={onExit} teacher={teacher} />;
   }
 
+  if (album) {
+    return <div className="page"><Fit><BadgeAlbum lang={lang} onClose={() => setAlbum(false)} /></Fit></div>;
+  }
+
   const meP = pub?.players.find((p) => p.id === id);
-  const toastText = toast ? (T as Record<string, string>)[toast] || toast : "";
+  const toastText = toast ? (T as unknown as Record<string, string>)[toast] || toast : "";
   const killer = killedBy ? pub?.players.find((p) => p.id === killedBy) : undefined;
 
   return (
-    <div className="page" style={{ minHeight: "100dvh" }}>
+    <div className="page">
       {net !== "open" && <Banner text={net === "closed" ? T.replaced : T.offline} />}
       {toastText && <Banner text={toastText} color="#f07a1a" />}
       {killedBy !== null && <KillScreen T={T} victim={look} killer={killer} />}
       {splash && pub && <MeetingSplash T={T} pub={pub} {...splash} />}
+      {reveal.length > 0 && <CardReveal ids={reveal} lang={lang} onDone={() => setReveal([])} />}
 
+      {pub && pub.phase === "play" ? (
+        <PlayView key={pub.round} T={T} lang={lang} me={id} pub={pub} secret={secret} relay={relay} others={others} mine={mine} send={send}
+          alive={!!meP?.alive} emotes={emotes} ventFx={ventFx} shake={shake} />
+      ) : (
+      <Fit>
       {!pub || pub.phase === "lobby" ? (
         <Center>
           <div className="kicker">{T.academy}</div>
@@ -169,20 +192,36 @@ export function Player({ code, onExit }: { code: string; onExit: () => void }) {
           )}
           <div style={{ display: "flex", gap: 8 }}>
             <button type="button" className="btn btn-s" onClick={() => setEditing(true)}>{T.customize}</button>
+            <button type="button" className="btn btn-y" onClick={() => setAlbum(true)}>🏅 {T.badges}</button>
             <SoundToggle T={T} />
           </div>
         </Center>
       ) : pub.phase === "reveal" ? (
         <RoleCard T={T} secret={secret} pub={pub} me={id} />
-      ) : pub.phase === "play" ? (
-        <PlayView key={pub.round} T={T} lang={lang} me={id} pub={pub} secret={secret} relay={relay} others={others} mine={mine} send={send}
-          alive={!!meP?.alive} emotes={emotes} ventFx={ventFx} shake={shake} />
       ) : pub.phase === "meeting" ? (
         <MeetingPhone T={T} lang={lang} me={id} pub={pub} secret={secret} send={send} />
       ) : pub.phase === "eject" ? (
         <Center><div style={{ width: "100%" }}><EjectScene pub={pub} lang={lang} /></div></Center>
       ) : (
-        <EndScreen pub={pub} lang={lang} />
+        <>
+          {reward && (
+            <div style={{ padding: "16px 16px 0", display: "flex", justifyContent: "center" }}>
+              <div className="plate" style={{ width: "min(1000px,100%)", display: "flex", flexWrap: "wrap", alignItems: "center", gap: 14, animation: "popIn .4s" }}>
+                <div style={{ font: "400 44px 'Archivo Black',sans-serif", color: "#f5c518", textShadow: "3px 3px 0 #0e1113" }}>+{reward.points}</div>
+                <div style={{ flex: 1, minWidth: 180 }}>
+                  <div className="lbl lbl-y" style={{ marginBottom: 4 }}>{T.pointsGame}</div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                    {Object.entries(reward.items).map(([k, v]) => <span key={k} className="tag" style={{ color: "#f2efe6" }}>{T.reasons[k] || k} +{v}</span>)}
+                  </div>
+                </div>
+                <button type="button" className="btn btn-y btn-sm" onClick={() => setAlbum(true)}>🏅 {T.badges}</button>
+              </div>
+            </div>
+          )}
+          <EndScreen pub={pub} lang={lang} />
+        </>
+      )}
+      </Fit>
       )}
     </div>
   );
@@ -201,7 +240,7 @@ function Customize({ T, lang, code, name, setName, look, setLook, onSave, joined
     </div>
   );
   return (
-    <div className="page" style={{ minHeight: "100dvh" }}>
+    <div className="page">
       <div className="hdr">
         <div className="hdr-row">
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}><div className="hdr-logo">?</div><div className="hdr-title">Impostor</div></div>
@@ -209,16 +248,17 @@ function Customize({ T, lang, code, name, setName, look, setLook, onSave, joined
         </div>
         <div className="hazard" />
       </div>
-      <div style={{ padding: "18px 16px 28px", display: "flex", flexDirection: "column", gap: 16, maxWidth: 560, width: "100%", margin: "0 auto" }}>
-        <div className="lbl lbl-y">{T.customize}</div>
-        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+      <Fit>
+      <div className="cust" style={{ padding: "18px 16px 20px", maxWidth: 560, width: "100%", margin: "0 auto" }}>
+        <div className="lbl lbl-y c-lbl">{T.customize}</div>
+        <div className="c-prev" style={{ display: "flex", alignItems: "center", gap: 16 }}>
           <div className="well" style={{ padding: 10, background: "radial-gradient(circle at 50% 70%,#3b4349,#1b2023)" }}><LingoBadge look={look} size={110} happy /></div>
           <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 10 }}>
             <input className="field" value={name} maxLength={14} placeholder={T.yourName} onChange={(e) => setName(e.target.value)} autoFocus={!name} />
             <button type="button" className="btn btn-o btn-sm" onClick={() => { setLook(randomLook()); sfx.pop(); }}>🎲 {lang === "es" ? "Aleatorio" : "Random"}</button>
           </div>
         </div>
-        <div>
+        <div className="c-color">
           <div className="lbl" style={{ marginBottom: 8 }}>{T.color}</div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(8,1fr)", gap: 6 }}>
             {COLORS.map((c, i) => (
@@ -227,14 +267,15 @@ function Customize({ T, lang, code, name, setName, look, setLook, onSave, joined
             ))}
           </div>
         </div>
-        <div><div className="lbl" style={{ marginBottom: 8 }}>{T.hat}</div>{chip("hat", HATS)}</div>
-        <div><div className="lbl" style={{ marginBottom: 8 }}>{T.face}</div>{chip("face", FACES)}</div>
-        <div><div className="lbl" style={{ marginBottom: 8 }}>{T.extra}</div>{chip("extra", EXTRAS)}</div>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <div className="c-hat"><div className="lbl" style={{ marginBottom: 8 }}>{T.hat}</div>{chip("hat", HATS)}</div>
+        <div className="c-face"><div className="lbl" style={{ marginBottom: 8 }}>{T.face}</div>{chip("face", FACES)}</div>
+        <div className="c-extra"><div className="lbl" style={{ marginBottom: 8 }}>{T.extra}</div>{chip("extra", EXTRAS)}</div>
+        <div className="c-btns" style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <button type="button" className="btn btn-y btn-big" disabled={!name.trim()} onClick={onSave}>{joined ? T.saveLook : T.join}</button>
           {!joined && <button type="button" className="btn btn-s" onClick={onExit}>{T.home}</button>}
         </div>
       </div>
+      </Fit>
     </div>
   );
 }
@@ -300,7 +341,8 @@ function MeetingPhone({ T, lang, me, pub, secret, send }: { T: GStrings; lang: L
   const pickPhrase = (ph: typeof PHRASES[number]) => (ph.needs ? setPending(ph) : say(ph.en));
 
   return (
-    <div style={{ padding: "16px 14px 28px", display: "flex", flexDirection: "column", gap: 14 }}>
+    <div className="mtg" style={{ padding: "16px 14px 20px" }}>
+      <div className="mtg-col">
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
         <div className="kicker" style={{ background: m.reason === "report" ? "#e23d4f" : "#f07a1a" }}>{m.reason === "report" ? T.bodyFound : m.reason === "emergency" ? T.emergencyCalled : T.teacherCalled}</div>
         <Countdown ms={msLeft} />
@@ -320,7 +362,9 @@ function MeetingPhone({ T, lang, me, pub, secret, send }: { T: GStrings; lang: L
       {m.stage === "vote" && alive && !myVote && !localVote && (
         <button type="button" className="btn btn-s" onClick={() => { setLocalVote("skip"); send({ k: "vote", target: "skip" }); sfx.vote(); }}>{T.skipVote}</button>
       )}
+      </div>
 
+      <div className="mtg-col">
       <div className="plate" style={{ padding: "12px 12px 14px" }}>
         <div className="lbl lbl-y" style={{ marginBottom: 8 }}>💬 {T.chat}</div>
         <ChatFeed pub={pub} me={me} max={8} />
@@ -357,6 +401,7 @@ function MeetingPhone({ T, lang, me, pub, secret, send }: { T: GStrings; lang: L
             )}
           </div>
         )}
+      </div>
       </div>
     </div>
   );
@@ -664,7 +709,7 @@ function PlayView({ T, lang, me, pub, secret, relay, others, mine, send, alive, 
         </div>
       ) : (
         <>
-          <div style={{ position: "absolute", right: 10, bottom: "max(14px, env(safe-area-inset-bottom))", display: "flex", flexDirection: "column", gap: 10, alignItems: "flex-end" }}>
+          <div style={{ position: "absolute", right: 10, bottom: "max(14px, env(safe-area-inset-bottom))", display: "flex", flexDirection: "column", gap: "min(10px,1.4dvh)", alignItems: "flex-end" }}>
             {imp && pub.settings.sabotage && (
               <ActBtn label={sabMs > 0 || pub.sabotage ? (pub.sabotage ? "…" : Math.ceil(sabMs / 1000) + "s") : T.sabotage} color="#9b6bd3" disabled={sabMs > 0 || !!pub.sabotage} onClick={() => setShowSab((v) => !v)} icon="🔥" small />
             )}
@@ -678,7 +723,7 @@ function PlayView({ T, lang, me, pub, secret, relay, others, mine, send, alive, 
                 onPointerDown={() => { setHolding(nearPanel.id); send({ k: "hold", panel: nearPanel.id, on: true }); }}
                 onPointerUp={() => { setHolding(null); send({ k: "hold", panel: nearPanel.id, on: false }); }}
                 onPointerLeave={() => { if (holding) { setHolding(null); send({ k: "hold", panel: nearPanel.id, on: false }); } }}
-                style={{ width: 96, height: 96, borderRadius: "50%", border: "4px solid #0e1113", background: holding ? "#7bbf5a" : "#e23d4f", color: "#0e1113", boxShadow: holding ? "0 1px 0 #0e1113" : "0 5px 0 #0e1113", font: "800 13px Archivo,sans-serif", textTransform: "uppercase", cursor: "pointer", transform: holding ? "translateY(4px)" : "none" }}>
+                style={{ width: "clamp(60px,13dvh,96px)", height: "clamp(60px,13dvh,96px)", borderRadius: "50%", border: "4px solid #0e1113", background: holding ? "#7bbf5a" : "#e23d4f", color: "#0e1113", boxShadow: holding ? "0 1px 0 #0e1113" : "0 5px 0 #0e1113", font: "800 13px Archivo,sans-serif", textTransform: "uppercase", cursor: "pointer", transform: holding ? "translateY(4px)" : "none" }}>
                 ✋<br />{T.hold} {nearPanel.id}
               </button>
             ) : (
@@ -720,11 +765,11 @@ function PlayView({ T, lang, me, pub, secret, relay, others, mine, send, alive, 
 const clamp = (v: number, m: number) => Math.max(-m, Math.min(m, v));
 
 function ActBtn({ label, icon, color, disabled, onClick, small }: { label: string; icon: string; color: string; disabled: boolean; onClick: () => void; small?: boolean }) {
-  const s = small ? 64 : 84;
+  const s = small ? "clamp(46px,9.5dvh,64px)" : "clamp(54px,12dvh,84px)";
   return (
     <button type="button" onClick={onClick} disabled={disabled}
-      style={{ width: s, height: s, borderRadius: "50%", border: "4px solid #0e1113", background: color, color: "#0e1113", boxShadow: "0 5px 0 #0e1113", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2, cursor: "pointer", font: `800 ${small ? 10 : 12}px Archivo,sans-serif`, textTransform: "uppercase", opacity: disabled ? 0.4 : 1 }}>
-      <span style={{ fontSize: small ? 20 : 26, lineHeight: 1 }}>{icon}</span>{label}
+      style={{ width: s, height: s, borderRadius: "50%", border: "4px solid #0e1113", background: color, color: "#0e1113", boxShadow: "0 5px 0 #0e1113", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2, cursor: "pointer", font: `800 ${small ? "clamp(7px,1.4dvh,10px)" : "clamp(8px,1.6dvh,12px)"} Archivo,sans-serif`, textTransform: "uppercase", opacity: disabled ? 0.4 : 1, overflow: "hidden", padding: 0, whiteSpace: "nowrap" }}>
+      <span style={{ fontSize: small ? "clamp(14px,3dvh,20px)" : "clamp(17px,3.6dvh,26px)", lineHeight: 1 }}>{icon}</span>{label}
     </button>
   );
 }
@@ -743,8 +788,8 @@ function FusePanel({ T, onClose, onFixed }: { T: GStrings; onClose: () => void; 
     if (allOn) { const t = setTimeout(() => fixedRef.current(), 350); return () => clearTimeout(t); }
   }, [allOn]);
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 50, background: "rgba(14,17,19,0.8)", display: "flex", alignItems: "center", justifyContent: "center", padding: 12 }}>
-      <div className="plate" style={{ width: "min(420px,100%)", animation: "popIn .2s" }}>
+    <div style={{ position: "fixed", inset: 0, zIndex: 50, background: "rgba(14,17,19,0.8)", display: "flex", flexDirection: "column", padding: 12 }}>
+      <Fit><div className="plate" style={{ width: "min(420px,100%)", margin: "0 auto", animation: "popIn .2s" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
           <div><div className="lbl lbl-y">⚡ {FUSE.label}</div><div style={{ fontSize: 14, color: "rgba(242,239,230,0.7)" }}>{T.fuseHelp}</div></div>
           <button type="button" className="sq btn-s" onClick={onClose}>✕</button>
@@ -757,7 +802,7 @@ function FusePanel({ T, onClose, onFixed }: { T: GStrings; onClose: () => void; 
             </button>
           ))}
         </div>
-      </div>
+      </div></Fit>
     </div>
   );
 }

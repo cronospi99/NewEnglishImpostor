@@ -38,6 +38,40 @@ Missions use easy content at A1–A2 and harder content at B1–C1. "Mixed" uses
 
 All character and map art is original SVG drawn in code (`src/game/Character.tsx`, `src/game/MapView.tsx`). There are no external image assets.
 
+## Among Us–style mechanics (videogame mode)
+
+- **Vision blocked by walls.** Light spills through doorways but not through walls. Ghosts see everything and float through walls.
+- **Eliminations.** The impostor has a cooldown. The killer snaps onto the victim's spot, the victim sees who got them, and nearby players see a ZAP effect.
+- **Vents** (impostors only). The vents form three linked networks. Hop between vents in the same network, then exit.
+- **Sabotage** (impostors only):
+  - **Lights out:** the crew's vision shrinks until someone flips the switches at the fuse box in the South hallway.
+  - **Fire alarm:** two players must hold panel A (Library) and panel B (Director's Office) at the same time within 45 s, or the impostors win.
+  - The emergency bell doesn't work during a sabotage.
+- **Meetings.** A full-screen splash announces the meeting. Players type one clue word, then accuse each other with quick English phrases ("I suspect …", "… was with me", "I saw … near the body"). The teacher can enable free text in the lobby settings. The vote result shows who voted for whom.
+- **Emotes** (👋 😱 🤔 👍 😂 ❗) appear as bubbles above your character.
+- **The teacher can play.** In the lobby, scan the yellow "Teacher plays too" QR code with your phone. You join as a regular player with a 🎓 badge and can be the impostor too.
+- **Sound effects** are synthesized in the browser, so there are no audio files. There's a 🔊 toggle on the lobby screens.
+
+## Points and teacher badges
+
+Students earn points during videogame mode:
+
+| Action | Points |
+| --- | --- |
+| Complete a mission (crew) | +1 |
+| Vote for a real impostor | +1 |
+| Report a body | +1 |
+| Fix a sabotage | +1 |
+| Eliminate someone (impostor) | +1 |
+| Survive to the end | +1 |
+| Crew wins / impostors win | +2 / +3 |
+
+Every **4 points** unlocks a random collectible card of a teacher from the Ibagué branch. There are 25 cards, and the coordinator's golden card only appears after 10 others. Points and cards are saved on each student's phone, so a student keeps their collection when they play on the same device. They can view it under **🏅 Badges** on the home page, in the lobby, or on the end screen. Card art and descriptions are in `src/badges/teachers.ts`; edit them there.
+
+## Screens fit any device
+
+Every screen fits the device without scrolling. A screen lays out for the device's width and shrinks evenly if it's still too tall (`src/shared/Fit.tsx`). On phones in landscape, the character designer and the meeting screen switch to a side-by-side layout.
+
 ## Architecture
 
 ```

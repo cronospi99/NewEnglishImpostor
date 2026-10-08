@@ -4,6 +4,7 @@ import * as E from "./engine";
 import { Relay, makeCode, makeId, type NetStatus } from "./net";
 import { defaultSettings, type FromHost, type HostState, type Pos, type PosMsg, type PublicPlayer, type Settings, type ToHost } from "./types";
 import { Header } from "../shared/Header";
+import { Fit } from "../shared/Fit";
 import { g } from "./i18n";
 import { LingoBadge, Lingo, useClock } from "./Character";
 import { MapDefs, MapStatic } from "./MapView";
@@ -59,6 +60,8 @@ export function Host({ onExit }: { onExit: () => void }) {
   const apply = useCallback((fn: (d: HostState, now: number) => E.Out[] | void) => {
     const d: HostState = structuredClone(ref.current);
     const outs = fn(d, Date.now()) || [];
+    /* game just ended: survival bonus + points for every phone */
+    if (ref.current.phase !== "end" && d.phase === "end") outs.push(...E.endRewards(d));
     ref.current = d;
     setS(d);
     deliver(outs);
@@ -171,6 +174,30 @@ export function Host({ onExit }: { onExit: () => void }) {
 
       {splash && <MeetingSplash T={T} pub={pub} {...splash} />}
 
+      {s.phase === "play" && (
+        <div className="pad-sm" style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", gap: 14, padding: "18px 30px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+            <TaskBar label={T.taskBar} done={tt.done} total={tt.total} />
+            <span className="tag" style={{ color: "#f2efe6", fontSize: 13 }}>{alive} / {s.players.length} {T.alive}</span>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, cursor: "pointer" }}>
+              <input type="checkbox" checked={teacherView} onChange={(e) => setTeacherView(e.target.checked)} /> {T.teacherView}
+            </label>
+            <button type="button" className="btn btn-o btn-sm" onClick={() => apply((d, n) => E.teacherMeeting(d, n))}>{T.callMeeting}</button>
+            <button type="button" className="btn btn-s btn-sm" onClick={() => apply((d, n) => E.endGame(d, n))}>{T.endGame}</button>
+          </div>
+          {s.sabotage && (
+            <div style={{ padding: "12px 16px", border: "3px solid #0e1113", borderRadius: 5, background: "#b4441f", color: "#fff3e0", font: "700 18px 'Space Mono',monospace", animation: "blink 1s infinite" }}>
+              {s.sabotage.kind === "alarm"
+                ? `🚨 ${T.fireAlarm} — ${Math.ceil(Math.max(0, s.sabotage.endsAt - now) / 1000)}s · ${T.alarmMsg}`
+                : `💡 ${T.lightsOut} — ${T.lightsMsg}`}
+            </div>
+          )}
+          <HostMap players={s.players} pos={pos} bodies={teacherView ? s.bodies : []} show={teacherView} sabotage={s.sabotage?.kind} held={s.sabotage ? Object.keys(s.sabotage.holds).filter((k) => s.sabotage!.holds[k].length) : []} />
+        </div>
+      )}
+
+      {s.phase !== "play" && <Fit>
+
       {s.phase === "lobby" && (
         <div className="stack-sm pad-sm" style={{ flex: 1, display: "grid", gridTemplateColumns: "minmax(min(340px,100%),0.8fr) minmax(min(420px,100%),1.2fr)", gap: 36, padding: "30px 30px", alignItems: "start" }}>
           <div>
@@ -253,28 +280,6 @@ export function Host({ onExit }: { onExit: () => void }) {
         </Center>
       )}
 
-      {s.phase === "play" && (
-        <div className="pad-sm" style={{ flex: 1, display: "flex", flexDirection: "column", gap: 14, padding: "18px 30px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
-            <TaskBar label={T.taskBar} done={tt.done} total={tt.total} />
-            <span className="tag" style={{ color: "#f2efe6", fontSize: 13 }}>{alive} / {s.players.length} {T.alive}</span>
-            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, cursor: "pointer" }}>
-              <input type="checkbox" checked={teacherView} onChange={(e) => setTeacherView(e.target.checked)} /> {T.teacherView}
-            </label>
-            <button type="button" className="btn btn-o btn-sm" onClick={() => apply((d, n) => E.teacherMeeting(d, n))}>{T.callMeeting}</button>
-            <button type="button" className="btn btn-s btn-sm" onClick={() => apply((d, n) => E.endGame(d, n))}>{T.endGame}</button>
-          </div>
-          {s.sabotage && (
-            <div style={{ padding: "12px 16px", border: "3px solid #0e1113", borderRadius: 5, background: "#b4441f", color: "#fff3e0", font: "700 18px 'Space Mono',monospace", animation: "blink 1s infinite" }}>
-              {s.sabotage.kind === "alarm"
-                ? `🚨 ${T.fireAlarm} — ${Math.ceil(Math.max(0, s.sabotage.endsAt - now) / 1000)}s · ${T.alarmMsg}`
-                : `💡 ${T.lightsOut} — ${T.lightsMsg}`}
-            </div>
-          )}
-          <HostMap players={s.players} pos={pos} bodies={teacherView ? s.bodies : []} show={teacherView} sabotage={s.sabotage?.kind} held={s.sabotage ? Object.keys(s.sabotage.holds).filter((k) => s.sabotage!.holds[k].length) : []} />
-        </div>
-      )}
-
       {s.phase === "meeting" && s.meeting && (
         <div className="pad-sm" style={{ flex: 1, display: "flex", flexDirection: "column", gap: 18, padding: "26px 30px" }}>
           <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 20, flexWrap: "wrap" }}>
@@ -316,6 +321,7 @@ export function Host({ onExit }: { onExit: () => void }) {
       {s.phase === "end" && (
         <EndScreen pub={pub} lang={s.settings.lang} onAgain={() => apply((d) => E.backToLobby(d))} />
       )}
+      </Fit>}
     </div>
   );
 }
@@ -372,8 +378,8 @@ export function TaskBar({ label, done, total }: { label: string; done: number; t
 function HostMap({ players, pos, bodies, show, sabotage, held }: { players: HostState["players"]; pos: React.MutableRefObject<Record<string, Pos>>; bodies: HostState["bodies"]; show: boolean; sabotage?: string; held: string[] }) {
   const t = useClock(true, show ? 30 : 6);
   return (
-    <div style={{ flex: 1, minHeight: 300, border: "4px solid #0e1113", borderRadius: 6, overflow: "hidden", background: "#141a1d", boxShadow: "0 6px 0 #0e1113" }}>
-      <svg viewBox={`40 20 ${WORLD.w - 40} ${WORLD.h - 20}`} preserveAspectRatio="xMidYMid meet" style={{ width: "100%", height: "100%", display: "block", maxHeight: "calc(100vh - 190px)" }}>
+    <div style={{ flex: 1, minHeight: 0, border: "4px solid #0e1113", borderRadius: 6, overflow: "hidden", background: "#141a1d", boxShadow: "0 6px 0 #0e1113" }}>
+      <svg viewBox={`40 20 ${WORLD.w - 40} ${WORLD.h - 20}`} preserveAspectRatio="xMidYMid meet" style={{ width: "100%", height: "100%", display: "block" }}>
         <MapDefs />
         <MapStatic />
         {bodies.map((b) => {
@@ -495,6 +501,7 @@ export function EndScreen({ pub, lang, onAgain }: { pub: ReturnType<typeof E.pub
                 <span style={{ font: "700 13px 'Space Mono',monospace", color: "#f5c518", minWidth: 22 }}>{i + 1}</span>
                 <LingoBadge look={p.look} size={30} />
                 <span style={{ flex: 1, fontWeight: 800 }}>{p.name}{p.role === "impostor" ? " ☠" : ""}</span>
+                {p.earned ? <span style={{ font: "700 12px 'Space Mono',monospace", color: "#7bbf5a" }}>+{p.earned}</span> : null}
                 <span style={{ font: "400 20px 'Archivo Black',sans-serif", color: "#f5c518" }}>{p.score}</span>
               </div>
             ))}

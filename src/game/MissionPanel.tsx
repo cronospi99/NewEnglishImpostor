@@ -4,6 +4,7 @@ import type { Lang } from "../shared/proximity";
 import { mcqBank, missionDefs, orderBank, sortBank, spotBank, tierFor, type MCQ } from "./missions";
 import { rooms, type Station } from "./map";
 import { sfx } from "./sfx";
+import { Fit } from "../shared/Fit";
 
 type Props = { station: Station; level: string; lang: Lang; fake: boolean; onDone: () => void; onClose: () => void };
 
@@ -25,8 +26,8 @@ export function MissionPanel({ station, level, lang, fake, onDone, onClose }: Pr
   const miss = () => { setShake((n) => n + 1); sfx.wrong(); };
 
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 50, background: "rgba(14,17,19,0.78)", display: "flex", alignItems: "center", justifyContent: "center", padding: 12 }}>
-      <div style={{ width: "min(560px,100%)", maxHeight: "100%", overflow: "auto", border: "4px solid #0e1113", borderRadius: 8, background: "linear-gradient(#3b4349,#2b3236)", boxShadow: "0 8px 0 #0e1113", animation: shake ? (shake % 2 ? "shake .25s 2" : "shakeB .25s 2") : "popIn .25s" }}>
+    <div style={{ position: "fixed", inset: 0, zIndex: 50, background: "rgba(14,17,19,0.78)", display: "flex", flexDirection: "column", padding: 12 }}>
+      <Fit><div style={{ width: "min(560px,100%)", margin: "0 auto", border: "4px solid #0e1113", borderRadius: 8, background: "linear-gradient(#3b4349,#2b3236)", boxShadow: "0 8px 0 #0e1113", animation: shake ? (shake % 2 ? "shake .25s 2" : "shakeB .25s 2") : "popIn .25s" }}>
         <div style={{ height: 10, backgroundImage: `repeating-linear-gradient(45deg,${room.accent} 0 12px,#0e1113 12px 24px)` }} />
         <div style={{ padding: "14px 16px 18px" }}>
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10 }}>
@@ -62,7 +63,7 @@ export function MissionPanel({ station, level, lang, fake, onDone, onClose }: Pr
             <SpotTask key={round} tiers={tiers} onWin={win} onMiss={miss} />
           )}
         </div>
-      </div>
+      </div></Fit>
     </div>
   );
 }

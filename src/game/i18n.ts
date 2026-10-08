@@ -36,6 +36,7 @@ const en = {
   chat: "Chat", accuse: "Say something", sendChat: "Send", chatPh: "Write a short message…", pickPlayer: "Choose a player", pickRoom: "Choose a room",
   emotes: "Emotes", teacherBadge: "Teacher", teacherPlays: "Teacher plays too", teacherPlaysHelp: "Scan this with your phone to join as a player (or open it in a new window).", openWindow: "Open in new window",
   sabotageOpt: "Sabotage", ventsOpt: "Vents", chatOpt: "Meeting chat", quickOnly: "Quick phrases", freeText: "Free text", on: "On", off: "Off",
+  badges: "My badges", pointsGame: "Points this game", reasons: { mission: "Missions", vote: "Correct votes", report: "Bodies reported", fix: "Sabotage fixed", elimination: "Eliminations", survive: "Survived", win: "Victory" } as Record<string, string>,
   eliminatedBy: "You were eliminated by", deadBody: "Dead body reported!", emergency: "Emergency meeting!", mute: "Sound", votedFor: "voted for",
   moveHelp: "Drag anywhere to move · tap the buttons to act"
 };
@@ -76,6 +77,7 @@ const es: typeof en = {
   chat: "Chat", accuse: "Di algo", sendChat: "Enviar", chatPh: "Escribe un mensaje corto…", pickPlayer: "Elige un jugador", pickRoom: "Elige una sala",
   emotes: "Emociones", teacherBadge: "Profe", teacherPlays: "El profe también juega", teacherPlaysHelp: "Escanéalo con tu móvil para jugar (o ábrelo en otra ventana).", openWindow: "Abrir en ventana nueva",
   sabotageOpt: "Sabotaje", ventsOpt: "Conductos", chatOpt: "Chat de reunión", quickOnly: "Frases rápidas", freeText: "Texto libre", on: "Sí", off: "No",
+  badges: "Mis insignias", pointsGame: "Puntos de esta partida", reasons: { mission: "Misiones", vote: "Votos correctos", report: "Cuerpos avisados", fix: "Sabotajes arreglados", elimination: "Eliminaciones", survive: "Sobreviviste", win: "Victoria" } as Record<string, string>,
   eliminatedBy: "Te eliminó", deadBody: "¡Cuerpo encontrado!", emergency: "¡Reunión de emergencia!", mute: "Sonido", votedFor: "votó a",
   moveHelp: "Arrastra para moverte · toca los botones para actuar"
 };
