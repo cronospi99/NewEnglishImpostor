@@ -113,7 +113,7 @@ export function Player({ code, onExit, demo = false, onJoined }: { code: string;
   const phaseKey = pub ? pub.phase + (pub.meeting ? ":" + pub.meeting.reason + pub.meeting.caller : "") : "";
   useEffect(() => {
     if (!pub) return;
-    if (pub.phase === "meeting" && pub.meeting && pub.meeting.stage === "clues") {
+    if (pub.phase === "meeting" && pub.meeting && pub.meeting.stage === "talk") {
       setSplash({ reason: pub.meeting.reason, caller: pub.meeting.caller, victim: pub.meeting.victim });
       if (pub.meeting.reason === "report") sfx.report(); else sfx.meeting();
       const t = setTimeout(() => setSplash(null), 2600);
@@ -245,7 +245,7 @@ function Customize({ T, lang, code, name, setName, look, setLook, onSave, joined
     <div className="page">
       <div className="hdr">
         <div className="hdr-row">
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}><div className="hdr-logo">?</div><div className="hdr-title">Impostor</div></div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}><div className="hdr-logo">?</div><div className="hdr-title">Smart Academia</div></div>
           <span className="tag" style={{ color: "#f5c518" }}>{teacher ? "🎓 " + T.teacherBadge + " · " : ""}{T.code} {code}</span>
         </div>
         <div className="hazard" />
@@ -297,13 +297,9 @@ function RoleCard({ T, secret, pub, me }: { T: GStrings; secret: Secret | null; 
         <div style={{ height: 12, backgroundImage: `repeating-linear-gradient(45deg,${imp ? "#f07a1a" : "#f5c518"} 0 11px,#0e1113 11px 22px)` }} />
         <div style={{ padding: "22px 20px", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
           <div className="lbl" style={{ color: "#f2efe6" }}>{T.youAre}</div>
-          <div style={{ font: "400 40px 'Archivo Black',sans-serif", textTransform: "uppercase", color: imp ? "#f07a1a" : "#7bbf5a", textShadow: "3px 3px 0 #0e1113" }}>{imp ? T.impostor : T.crew}</div>
+          <div style={{ fontSize: 64, lineHeight: 1, animation: "bob 1.4s ease-in-out infinite" }}>{imp ? "📱" : "📚"}</div>
+          <div style={{ font: "400 clamp(28px,8vw,40px) 'Archivo Black',sans-serif", lineHeight: 1.05, textTransform: "uppercase", color: imp ? "#f07a1a" : "#7bbf5a", textShadow: "3px 3px 0 #0e1113" }}>{imp ? T.impostor : T.crew}</div>
           <div style={{ fontSize: 16, color: "rgba(242,239,230,0.8)" }}>{imp ? T.impGoal : T.crewGoal}</div>
-          <div className="well" style={{ padding: "12px 18px", marginTop: 6 }}>
-            <div className="lbl">{T.yourWord}</div>
-            <div style={{ font: "400 32px 'Archivo Black',sans-serif", textTransform: "uppercase" }}>{secret.word}</div>
-            {secret.hint && <div style={{ fontSize: 15, color: "rgba(242,239,230,0.75)" }}>{secret.hint}</div>}
-          </div>
           {partners.length > 0 && <div style={{ fontSize: 15 }}>{T.partner}: <b>{partners.map((p) => p.name).join(", ")}</b></div>}
         </div>
       </div>
@@ -311,7 +307,7 @@ function RoleCard({ T, secret, pub, me }: { T: GStrings; secret: Secret | null; 
   );
 }
 
-/* ---------------- meeting on the phone: clue, chat/accuse, vote ---------------- */
+/* ---------------- meeting on the phone: discuss in the chat, then vote ---------------- */
 
 const PHRASES: { en: string; needs?: "p" | "r" }[] = [
   { en: "I suspect {p}.", needs: "p" },
@@ -319,6 +315,7 @@ const PHRASES: { en: string; needs?: "p" | "r" }[] = [
   { en: "I saw {p} near the body.", needs: "p" },
   { en: "{p} was with me.", needs: "p" },
   { en: "{p} is safe.", needs: "p" },
+  { en: "{p} was on their phone!", needs: "p" },
   { en: "Where were you, {p}?", needs: "p" },
   { en: "I was in the {r}.", needs: "r" },
   { en: "Who called the meeting?" },
@@ -328,13 +325,11 @@ const PHRASES: { en: string; needs?: "p" | "r" }[] = [
 
 function MeetingPhone({ T, lang, me, pub, secret, send }: { T: GStrings; lang: Lang; me: string; pub: PublicState & { at: number }; secret: Secret | null; send: (m: ToHost) => void }) {
   const m = pub.meeting!;
-  const [clue, setClue] = useState("");
   const [now, setNow] = useState(Date.now());
   const [pending, setPending] = useState<typeof PHRASES[number] | null>(null);
   const [free, setFree] = useState("");
   useEffect(() => { const iv = setInterval(() => setNow(Date.now()), 250); return () => clearInterval(iv); }, []);
   const alive = !!pub.players.find((p) => p.id === me)?.alive;
-  const sent = m.clues[me];
   const myVote = m.voted.indexOf(me) !== -1 ? "x" : undefined;
   const [localVote, setLocalVote] = useState<string | undefined>();
   const msLeft = Math.max(0, m.msLeft - (now - pub.at));
@@ -349,16 +344,9 @@ function MeetingPhone({ T, lang, me, pub, secret, send }: { T: GStrings; lang: L
         <div className="kicker" style={{ background: m.reason === "report" ? "#e23d4f" : "#f07a1a" }}>{m.reason === "report" ? T.bodyFound : m.reason === "emergency" ? T.emergencyCalled : T.teacherCalled}</div>
         <Countdown ms={msLeft} />
       </div>
-      {secret && <div className="tag" style={{ color: imp ? "#f07a1a" : "#f5c518", alignSelf: "flex-start", fontSize: 12 }}>{T.yourWord}: {secret.word}</div>}
-      <h2 className="h2" style={{ fontSize: 24, margin: 0 }}>{m.stage === "clues" ? (imp ? T.clueStageImp : T.clueStage) : m.stage === "vote" ? T.voteStage : T.result}</h2>
-      {m.stage === "clues" && alive && (
-        sent ? <div className="tag" style={{ color: "#7bbf5a", fontSize: 14, alignSelf: "flex-start" }}>{T.sent} “{sent}”</div> : (
-          <form onSubmit={(e) => { e.preventDefault(); if (clue.trim()) { send({ k: "clue", text: clue.trim() }); sfx.pop(); } }} style={{ display: "flex", gap: 8 }}>
-            <input className="field" value={clue} maxLength={24} placeholder={T.typeClue} onChange={(e) => setClue(e.target.value.replace(/\s+/g, " "))} />
-            <button type="submit" className="btn btn-y" disabled={!clue.trim()}>{T.send}</button>
-          </form>
-        )
-      )}
+      {secret && <div className="tag" style={{ color: imp ? "#f07a1a" : "#7bbf5a", alignSelf: "flex-start", fontSize: 12 }}>{imp ? "📱 " + T.impostor : "📚 " + T.crew}</div>}
+      <h2 className="h2" style={{ fontSize: 24, margin: 0 }}>{m.stage === "talk" ? T.talkStage : m.stage === "vote" ? T.voteStage : T.result}</h2>
+      {m.stage === "talk" && alive && <div style={{ fontSize: 14, color: "rgba(242,239,230,0.7)" }}>{T.talkHelp}</div>}
       {!alive && <div className="tag" style={{ alignSelf: "flex-start" }}>{T.ghost}</div>}
       <MeetingBoard pub={pub} lang={lang} me={me} myVote={localVote || myVote} onVote={alive ? (t) => { setLocalVote(t); send({ k: "vote", target: t }); sfx.vote(); } : undefined} />
       {m.stage === "vote" && alive && !myVote && !localVote && (
@@ -744,11 +732,11 @@ function PlayView({ T, lang, me, pub, secret, relay, others, mine, send, alive, 
       )}
       <div style={{ position: "absolute", top: (lights || alarm) ? 122 : 62, left: 8, maxWidth: "62vw" }}>
         <button type="button" className="tag" onClick={() => setShowList((v) => !v)} style={{ color: imp ? "#ff5a5a" : "#f5c518", cursor: "pointer" }}>
-          {imp ? "☠ " + T.impostor : T.missions} {showList ? "▾" : "▸"}
+          {imp ? "📱 " + T.impostor : "📚 " + T.crew} {showList ? "▾" : "▸"}
         </button>
         {showList && (
           <div style={{ marginTop: 4, padding: "6px 8px", border: "2px solid #0e1113", borderRadius: 4, background: "#1b2023dd", fontSize: 12, lineHeight: 1.5 }}>
-            {secret && <div style={{ font: "700 11px 'Space Mono',monospace", color: "rgba(242,239,230,0.6)" }}>{T.yourWord}: <b style={{ color: "#f2efe6" }}>{secret.word}</b></div>}
+            <div style={{ font: "700 11px 'Space Mono',monospace", color: "rgba(242,239,230,0.6)" }}>{imp ? T.fakeMissions : T.missions}</div>
             {myTasks.map((s) => {
               const r = rooms.find((x) => x.id === s.room)!;
               const ok = doneSet.has(s.id);

@@ -4,7 +4,6 @@
 import { Relay } from "./net";
 import type { FromHost, PosMsg, PublicState, Secret, ToHost, Look } from "./types";
 import { ALARM_PANELS, FUSE, RANGE, SPEED, WORLD, dist, ghostMove, moveWithin, spawnPoint, stations, walkable } from "./map";
-import { packs, packsEs, related, relatedEs, type Entry } from "../shared/words";
 import { pick, randInt } from "../shared/random";
 import { rooms } from "./map";
 
@@ -64,18 +63,7 @@ export function findPath(from: P, to: P): P[] {
   return smooth.length ? smooth : [to];
 }
 
-function relatedWord(word: string): string {
-  const all: { e: Entry; lang: "en" | "es" }[] = [
-    ...Object.values(packs).flat().map((e) => ({ e, lang: "en" as const })),
-    ...Object.values(packsEs).flat().map((e) => ({ e, lang: "es" as const }))
-  ];
-  const hit = all.find((x) => x.e[0] === word || x.e[1] === word);
-  if (!hit) return pick(["interesting", "big", "useful", "fun", "normal"]);
-  const list = (hit.lang === "es" ? relatedEs : related)[hit.e[3]].split(" ").filter((w) => w.length > 2 && !word.toLowerCase().includes(w));
-  return pick(list);
-}
-
-const PHRASES_P = ["I suspect {p}.", "{p} is acting sus!", "Where were you, {p}?", "{p} was with me.", "I saw {p} near the body.", "{p} is safe."];
+const PHRASES_P = ["I suspect {p}.", "{p} is acting sus!", "Where were you, {p}?", "{p} was with me.", "I saw {p} near the body.", "{p} is safe.", "{p} was on their phone!"];
 const PHRASES = ["I didn't see anything.", "Let's skip this vote.", "Who called the meeting?", "I was in the {r}."];
 
 export class Bot {
@@ -140,10 +128,11 @@ export class Bot {
     if (this.holding) { this.send({ k: "hold", panel: this.holding, on: false }); this.holding = null; }
     if (!m || !this.me()?.alive) return;
     const others = s.players.filter((p) => p.alive && p.id !== this.id);
-    if (m.stage === "clues") {
-      this.later(1500 + randInt(5000), () => { if (this.secret) this.send({ k: "clue", text: relatedWord(this.secret.word) }); });
-      if (Math.random() < 0.7) {
-        this.later(3500 + randInt(7000), () => {
+    if (m.stage === "talk") {
+      /* one or two lines of discussion each */
+      const lines = Math.random() < 0.85 ? 1 + randInt(2) : 0;
+      for (let n = 0; n < lines; n++) {
+        this.later(2500 + n * 6000 + randInt(6000), () => {
           const tpl = Math.random() < 0.6 && others.length ? pick(PHRASES_P).replace("{p}", pick(others).name) : pick(PHRASES).replace("{r}", pick(rooms).en);
           this.send({ k: "chat", text: tpl });
         });

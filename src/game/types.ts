@@ -1,6 +1,7 @@
-import type { Entry, Level } from "../shared/words";
+import type { Level } from "../shared/words";
 import type { Lang } from "../shared/proximity";
 
+/* internal ids — shown to players as "Good student" and "Addicted to Phone student" */
 export type Role = "crew" | "impostor";
 
 export interface Look {
@@ -26,9 +27,9 @@ export interface Settings {
   impostors: number;
   tasksPerPlayer: number;
   killCooldown: number; // seconds
-  clueSecs: number;
+  /* Among Us-style discussion before the vote */
+  talkSecs: number;
   voteSecs: number;
-  impostorSees: "decoy" | "hint";
   emergencies: number;
   sabotage: boolean;
   vents: boolean;
@@ -41,9 +42,8 @@ export const defaultSettings: Settings = {
   impostors: 1,
   tasksPerPlayer: 4,
   killCooldown: 30,
-  clueSecs: 40,
+  talkSecs: 45,
   voteSecs: 40,
-  impostorSees: "decoy",
   emergencies: 1,
   sabotage: true,
   vents: true,
@@ -79,9 +79,8 @@ export interface Meeting {
   caller: string;
   reason: "report" | "emergency" | "teacher";
   victim?: string;
-  stage: "clues" | "vote" | "result";
+  stage: "talk" | "vote" | "result";
   endsAt: number;
-  clues: Record<string, string>;
   votes: Record<string, string>; // voter -> target id | "skip"
   chat: ChatLine[];
 }
@@ -109,7 +108,6 @@ export interface HostState {
   settings: Settings;
   players: PlayerState[];
   bodies: Body[];
-  entry: Entry | null;
   meeting: Meeting | null;
   eject: Eject | null;
   winner: Role | null;
@@ -117,7 +115,6 @@ export interface HostState {
   phaseEndsAt: number;
   round: number;
   prevImpostors: string[];
-  usedWords: string[];
   log: string[];
   sabotage: Sabotage | null;
   sabotageReadyAt: number;
@@ -129,7 +126,7 @@ export interface HostState {
 
 /* ---------- wire messages ---------- */
 
-/* public snapshot every phone receives (no roles, no secret word) */
+/* public snapshot every phone receives (no roles) */
 export interface PublicPlayer {
   id: string;
   name: string;
@@ -158,8 +155,6 @@ export interface PublicState {
   winReason: string;
   msLeft: number;
   round: number;
-  word?: string;
-  decoy?: string;
   sabotage: { kind: SabotageKind; msLeft: number; held: string[] } | null;
   bathLocked: boolean;
   lastKill: { x: number; y: number; ago: number; victim: string } | null;
@@ -168,8 +163,6 @@ export interface PublicState {
 /* private message sent to one player */
 export interface Secret {
   role: Role;
-  word: string; // real word for crew, decoy (or "?") for impostors
-  hint?: string;
   partners: string[];
   tasks: string[];
   done: string[];
@@ -185,7 +178,6 @@ export type ToHost =
   | { k: "report"; body: string }
   | { k: "emergency" }
   | { k: "task"; station: string }
-  | { k: "clue"; text: string }
   | { k: "vote"; target: string }
   | { k: "chat"; text: string }
   | { k: "sabotage"; kind: SabotageKind }

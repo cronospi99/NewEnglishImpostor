@@ -3,17 +3,17 @@
 A word game for English classes, with two modes:
 
 - **Classic mode** (`/classic`): one projector screen. The teacher hands out secret words one card at a time, logs each student's clue, runs the vote and opens the hatch. This is a port of the Claude Design prototype (`design-handoff/project/Impostor.dc.html`).
-- **Videogame mode** (`/host`): the projector shows a QR code. Students scan it, design their own character and walk around a top-down map of a Smart Academia de Idiomas branch. They complete English missions in each room while the impostor tries to eliminate them. Meetings combine the original word game (everyone types one word about the secret word) with phone voting.
+- **Videogame mode** (`/host`): the projector shows a QR code. Students scan it, design their own character and walk around a top-down map of a Smart Academia de Idiomas branch. Every student is secretly a **Good student** 📚 or an **Addicted to Phone student** 📱. Good students complete English missions in each room while the phone addicts try to eliminate them. Meetings work like Among Us: discuss in the chat, then vote on the phone. (No secret words here; that stays in Classic mode.)
 
 ## How a videogame round works
 
 1. The teacher opens **Host a game** on the projector. A room code and QR code appear.
 2. Students scan the code (or go to `/join/CODE`), choose a name, colour, hat, face and extra, and press **Join the shift**.
-3. The teacher picks the level, language, number of impostors, missions per player and timers, then presses **Start the shift**.
-4. Each phone shows the student's role. The crew sees the secret word; the impostor sees a decoy word or a vague hint.
-5. **Crew:** walk to the rooms on your mission list (yellow `!` markers; the 🗺 map also shows them) and press **Use** to play the mission. The crew wins when the shared mission bar fills up or every impostor is voted out.
-6. **Impostor:** get close to a crew member and press **Eliminate** (there is a cooldown). Impostors can pretend to do missions, but those don't count. Impostors win when they equal or outnumber the crew.
-7. **Meetings** start when someone reports a body (**Report**), rings the emergency bell in Reception, or the teacher presses **Call meeting**. Everyone types one word about the secret word, then votes on their phone. The projector shows the clues, the votes and the ejection.
+3. The teacher picks the level, language, number of phone addicts, missions per player and timers, then presses **Start the shift**.
+4. Each phone shows the student's tag: **Good student** 📚 or **Addicted to Phone student** 📱. Phone addicts also see who else is addicted.
+5. **Good students:** walk to the rooms on your mission list (yellow `!` markers; the 🗺 map also shows them) and press **Use** to play the mission. Good students win when the shared mission bar fills up or every phone addict is voted out.
+6. **Addicted to Phone students:** get close to a good student and press **Eliminate** (there is a cooldown). They can pretend to do missions, but those don't count. They win when they equal or outnumber the good students.
+7. **Meetings** start when someone reports a body (**Report**), rings the emergency bell in Reception, or the teacher presses **Call meeting**. Everyone discusses in the chat for the discussion time, then votes on their phone: "Who is addicted to their phone?". The projector shows the chat, the votes and the ejection.
 8. Eliminated players become ghosts and keep doing missions.
 
 ### The academy's special places
@@ -55,22 +55,22 @@ Choose **Demo** on the home page, or go to `/demo`. You play videogame mode on o
 
 1. Design your character and press **Join the shift**. The projector screen opens with the bots already in the lobby.
 2. Press **Start the shift**. The view switches to your phone screen. Use the **📽 Projector / 📱 Phone** toggle at the top to switch between the two at any time.
-3. The bots walk around the academy, do missions, eliminate (when they're the impostor), report bodies, fix sabotage, type clues, chat and vote.
+3. The bots walk around the academy, do missions, eliminate (when they're phone addicts), report bodies, fix sabotage, chat and vote.
 
 Demo games don't add points to your badge collection.
 
 ## Among Us–style mechanics (videogame mode)
 
 - **Vision blocked by walls.** Light spills through doorways but not through walls. Ghosts see everything and float through walls.
-- **Eliminations.** The impostor has a cooldown. The killer snaps onto the victim's spot, the victim sees who got them, and nearby players see a ZAP effect.
-- **Vents** (impostors only). The vents form three linked networks. Hop between vents in the same network, then exit.
-- **Sabotage** (impostors only):
-  - **Lights out:** the crew's vision shrinks until someone flips the switches at the fuse box in the South hallway.
-  - **Fire alarm:** two players must hold panel A (Library) and panel B (Director's Office) at the same time within 45 s, or the impostors win.
+- **Eliminations.** Phone addicts have a cooldown. The killer snaps onto the victim's spot, the victim sees who got them, and nearby players see a ZAP effect.
+- **Vents** (phone addicts only). The vents form three linked networks. Hop between vents in the same network, then exit.
+- **Sabotage** (phone addicts only):
+  - **Lights out:** the good students' vision shrinks until someone flips the switches at the fuse box in the South hallway.
+  - **Fire alarm:** two players must hold panel A (Library) and panel B (Director's Office) at the same time within 45 s, or the phone addicts win.
   - The emergency bell doesn't work during a sabotage.
-- **Meetings.** A full-screen splash announces the meeting. Players type one clue word, then accuse each other with quick English phrases ("I suspect …", "… was with me", "I saw … near the body"). The teacher can enable free text in the lobby settings. The vote result shows who voted for whom.
+- **Meetings.** A full-screen splash announces the meeting. Players discuss and accuse each other with quick English phrases ("I suspect …", "… was with me", "I saw … near the body", "… was on their phone!"), then vote. The teacher can enable free text in the lobby settings. The vote result shows who voted for whom.
 - **Emotes** (👋 😱 🤔 👍 😂 ❗) appear as bubbles above your character.
-- **The teacher can play.** In the lobby, scan the yellow "Teacher plays too" QR code with your phone. You join as a regular player with a 🎓 badge and can be the impostor too.
+- **The teacher can play.** In the lobby, scan the yellow "Teacher plays too" QR code with your phone. You join as a regular player with a 🎓 badge and can be a phone addict too.
 - **Sound effects** are synthesized in the browser, so there are no audio files. There's a 🔊 toggle on the lobby screens.
 
 ## Points and teacher badges
@@ -79,13 +79,13 @@ Students earn points during videogame mode:
 
 | Action | Points |
 | --- | --- |
-| Complete a mission (crew) | +1 |
-| Vote for a real impostor | +1 |
+| Complete a mission (good student) | +1 |
+| Vote for a real phone addict | +1 |
 | Report a body | +1 |
 | Fix a sabotage | +1 |
-| Eliminate someone (impostor) | +1 |
+| Eliminate someone (phone addict) | +1 |
 | Survive to the end | +1 |
-| Crew wins / impostors win | +2 / +3 |
+| Good students win / phone addicts win | +2 / +3 |
 
 Every **4 points** unlocks a random collectible card of a teacher from the Ibagué branch. There are 25 cards, and the coordinator's golden card only appears after 10 others. Points and cards are saved on each student's phone, so a student keeps their collection when they play on the same device. They can view it under **🏅 Badges** on the home page, in the lobby, or on the end screen. Card art and descriptions are in `src/badges/teachers.ts`; edit them there.
 

@@ -16,7 +16,7 @@ const S = {
     choose: "Choose a mode",
     classic: "Classic", classicP: "One projector, students speak out loud. The teacher deals secret words, logs the clues and runs the vote.",
     classicTag: "No phones needed",
-    video: "Videogame", videoP: "Everyone joins from their phone, walks around the academy, completes English missions, sabotages, eliminates — and votes the impostor out.",
+    video: "Videogame", videoP: "Everyone joins from their phone, walks around the academy and completes English missions. Good students vs. students addicted to their phones: sabotage, eliminate, discuss and vote them out.",
     videoTag: "Phones · QR code",
     demo: "Demo", demoP: "Try videogame mode on your own right now: you play against five bots on this device. Nothing to install, no phones needed.", demoTag: "Solo · bots",
     back: "← Back"
@@ -31,7 +31,7 @@ const S = {
     choose: "Elige un modo",
     classic: "Clásico", classicP: "Un proyector y los estudiantes hablan en voz alta. El profesor reparte las palabras, anota las pistas y dirige la votación.",
     classicTag: "Sin móviles",
-    video: "Videojuego", videoP: "Todos entran desde el móvil, recorren la academia, hacen misiones de inglés, sabotean, eliminan… y expulsan al impostor.",
+    video: "Videojuego", videoP: "Todos entran desde el móvil, recorren la academia y hacen misiones de inglés. Buenos estudiantes contra adictos al celular: sabotean, eliminan, discuten y votan para expulsarlos.",
     videoTag: "Móviles · código QR",
     demo: "Demo", demoP: "Prueba el modo videojuego tú solo ahora mismo: juegas contra cinco bots en este dispositivo. Sin instalar nada y sin móviles.", demoTag: "Solo · bots",
     back: "← Atrás"

@@ -1,7 +1,6 @@
 /* Host-authoritative rules. Every function mutates the given state and returns
    messages that the host should deliver to specific players. */
 import { pickImpostors, shuffle, randInt } from "../shared/random";
-import { wordPool } from "../shared/pool";
 import { ALARM_PANELS, BELL, FUSE, RANGE, dist, spawnPoint, stations } from "./map";
 import {
   defaultSettings, type FromHost, type HostState, type Look, type PlayerState, type Pos, type PublicState, type Role, type Secret
@@ -21,9 +20,9 @@ export const FIRST_SABOTAGE_MS = 20000;
 
 export function createState(code: string): HostState {
   return {
-    code, phase: "lobby", settings: { ...defaultSettings }, players: [], bodies: [], entry: null,
+    code, phase: "lobby", settings: { ...defaultSettings }, players: [], bodies: [],
     meeting: null, eject: null, winner: null, winReason: "", phaseEndsAt: 0, round: 0,
-    prevImpostors: [], usedWords: [], log: [], sabotage: null, sabotageReadyAt: 0, lastKill: null, bathLocked: false
+    prevImpostors: [], log: [], sabotage: null, sabotageReadyAt: 0, lastKill: null, bathLocked: false
   };
 }
 
@@ -98,11 +97,6 @@ export function startGame(s: HostState, now: number): Out[] {
   const st = s.settings;
   const count = Math.max(1, Math.min(st.impostors, Math.floor((ids.length - 1) / 2)));
   const imps = pickImpostors(ids, count, s.prevImpostors);
-  const pool = wordPool(st.lang, st.level, "All");
-  let left = pool.filter((e) => s.usedWords.indexOf(e[0]) === -1);
-  if (!left.length) { left = pool; s.usedWords = []; }
-  s.entry = left[randInt(left.length)];
-  s.usedWords.push(s.entry[0]);
   s.prevImpostors = imps;
   s.round += 1;
   s.bodies = [];
@@ -141,12 +135,9 @@ export function secrets(s: HostState, now: number): Out[] {
 
 export function secretFor(s: HostState, id: string, now: number): Secret {
   const p = P(s, id)!;
-  const e = s.entry || ["", "", "", ""];
   const imp = p.role === "impostor";
   return {
     role: p.role,
-    word: imp ? (s.settings.impostorSees === "decoy" ? e[1] : "?") : e[0],
-    hint: imp && s.settings.impostorSees === "hint" ? e[2] : undefined,
     partners: imp ? s.players.filter((x) => x.role === "impostor" && x.id !== id).map((x) => x.id) : [],
     tasks: p.tasks,
     done: p.done,
@@ -214,7 +205,7 @@ function startMeeting(s: HostState, caller: string, reason: "report" | "emergenc
   s.phase = "meeting";
   s.bodies = [];
   s.sabotage = null;
-  s.meeting = { caller, reason, victim, stage: "clues", endsAt: now + s.settings.clueSecs * 1000, clues: {}, votes: {}, chat: [] };
+  s.meeting = { caller, reason, victim, stage: "talk", endsAt: now + s.settings.talkSecs * 1000, votes: {}, chat: [] };
   return teleportAll(s);
 }
 
@@ -230,16 +221,6 @@ export function taskDone(s: HostState, id: string, station: string, now: number)
 }
 
 const alive = (s: HostState) => s.players.filter((p) => p.alive);
-
-export function clue(s: HostState, id: string, text: string, now: number) {
-  const p = P(s, id), m = s.meeting;
-  if (!p || !p.alive || !m || m.stage !== "clues") return [];
-  const t = String(text || "").replace(/\s+/g, " ").trim().slice(0, 24);
-  if (!t) return [];
-  m.clues[id] = t;
-  if (alive(s).filter((x) => x.connected).every((x) => m.clues[x.id])) toVote(s, now);
-  return [];
-}
 
 function toVote(s: HostState, now: number) {
   if (!s.meeting) return;
@@ -390,7 +371,7 @@ export function tick(s: HostState, now: number, pos: Positions = {}): Out[] {
     return secrets(s, now);
   }
   if (s.phase === "meeting" && s.meeting && now >= s.meeting.endsAt) {
-    if (s.meeting.stage === "clues") { toVote(s, now); return []; }
+    if (s.meeting.stage === "talk") { toVote(s, now); return []; }
     if (s.meeting.stage === "vote") { toResult(s, now); return []; }
     return doEject(s, now);
   }
@@ -450,7 +431,7 @@ export function publicState(s: HostState, now: number): PublicState {
     tasksDone: tt.done,
     tasksTotal: tt.total,
     meeting: m ? {
-      caller: m.caller, reason: m.reason, victim: m.victim, stage: m.stage, clues: m.clues, chat: m.chat,
+      caller: m.caller, reason: m.reason, victim: m.victim, stage: m.stage, chat: m.chat,
       msLeft: Math.max(0, m.endsAt - now), voted: Object.keys(m.votes),
       votes: m.stage === "result" ? m.votes : undefined
     } : null,
@@ -459,8 +440,6 @@ export function publicState(s: HostState, now: number): PublicState {
     winReason: s.winReason,
     msLeft: Math.max(0, s.phaseEndsAt - now),
     round: s.round,
-    word: showRoles && s.entry ? s.entry[0] : undefined,
-    decoy: showRoles && s.entry ? s.entry[1] : undefined,
     sabotage: s.sabotage ? {
       kind: s.sabotage.kind,
       msLeft: s.sabotage.endsAt ? Math.max(0, s.sabotage.endsAt - now) : 0,

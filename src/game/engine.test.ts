@@ -15,15 +15,16 @@ function game(n = 5): HostState {
 const near = (s: HostState): Record<string, Pos> => Object.fromEntries(s.players.map((p) => [p.id, { x: 500, y: 620, dir: 1, moving: false }]));
 
 describe("engine", () => {
-  it("starts with one impostor, tasks and a secret word", () => {
+  it("starts with one phone addict and missions, no secret word", () => {
     const s = game();
     expect(s.phase).toBe("play");
     expect(s.players.filter((p) => p.role === "impostor")).toHaveLength(1);
     expect(s.players.every((p) => p.tasks.length === s.settings.tasksPerPlayer)).toBe(true);
     const crew = s.players.find((p) => p.role === "crew")!;
     const imp = s.players.find((p) => p.role === "impostor")!;
-    expect(E.secretFor(s, crew.id, 0).word).toBe(s.entry![0]);
-    expect(E.secretFor(s, imp.id, 0).word).toBe(s.entry![1]);
+    expect(E.secretFor(s, crew.id, 0).role).toBe("crew");
+    expect(E.secretFor(s, imp.id, 0).role).toBe("impostor");
+    expect("word" in E.secretFor(s, crew.id, 0)).toBe(false);
   });
 
   it("never picks the same impostor in back-to-back games", () => {
@@ -59,7 +60,8 @@ describe("engine", () => {
     const s = game(5);
     const imp = s.players.find((p) => p.role === "impostor")!;
     E.teacherMeeting(s, 50000);
-    s.players.forEach((p) => E.clue(s, p.id, "word", 50001));
+    expect(s.meeting!.stage).toBe("talk");
+    E.tick(s, 50000 + s.settings.talkSecs * 1000);
     expect(s.meeting!.stage).toBe("vote");
     s.players.forEach((p) => E.vote(s, p.id, imp.id, 50002));
     expect(s.meeting!.stage).toBe("result");
@@ -224,7 +226,7 @@ describe("engine", () => {
     const s = game(5);
     const pub = E.publicState(s, 0);
     expect(pub.players.every((p) => p.role === undefined)).toBe(true);
-    expect(pub.word).toBeUndefined();
+    expect(JSON.stringify(pub)).not.toContain("\"role\"");
   });
 });
 

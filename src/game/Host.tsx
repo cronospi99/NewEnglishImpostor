@@ -99,7 +99,6 @@ export function Host({ onExit, demo = false, onPhase }: { onExit: () => void; de
           case "report": return E.report(d, id, m.body, pos.current, now);
           case "emergency": return E.emergency(d, id, pos.current, now);
           case "task": return E.taskDone(d, id, m.station, now);
-          case "clue": return E.clue(d, id, m.text, now);
           case "vote": return E.vote(d, id, m.target, now);
           case "chat": return E.chat(d, id, m.text, now);
           case "sabotage": return E.sabotage(d, id, m.kind, now);
@@ -139,7 +138,7 @@ export function Host({ onExit, demo = false, onPhase }: { onExit: () => void; de
   /* projector sounds + meeting splash */
   const phaseKey = s.phase + (s.meeting ? ":" + s.meeting.reason + s.meeting.caller : "");
   useEffect(() => {
-    if (s.phase === "meeting" && s.meeting && s.meeting.stage === "clues") {
+    if (s.phase === "meeting" && s.meeting && s.meeting.stage === "talk") {
       setSplash({ reason: s.meeting.reason, caller: s.meeting.caller, victim: s.meeting.victim });
       if (!demo) { if (s.meeting.reason === "report") sfx.report(); else sfx.meeting(); }
       const t = setTimeout(() => setSplash(null), 2600);
@@ -166,7 +165,7 @@ export function Host({ onExit, demo = false, onPhase }: { onExit: () => void; de
   return (
     <div className="page">
       <Header
-        title="Impostor"
+        title="Smart Academia"
         phase={T[s.phase]}
         chips={[`${T.code} ${init.code}`, `${s.settings.lang.toUpperCase()} · ${s.settings.level}`, net === "open" ? "● online" : "○ " + T.connecting]}
         actions={[
@@ -253,8 +252,7 @@ export function Host({ onExit, demo = false, onPhase }: { onExit: () => void; de
                 <Setting label={T.impostors} opts={[[1, "1"], [2, "2"], [3, "3"]]} cur={s.settings.impostors} onPick={(v) => setSetting("impostors", v)} />
                 <Setting label={T.tasks} opts={[[3, "3"], [4, "4"], [5, "5"], [6, "6"]]} cur={s.settings.tasksPerPlayer} onPick={(v) => setSetting("tasksPerPlayer", v)} />
                 <Setting label={T.cooldown} opts={[[20, "20s"], [30, "30s"], [45, "45s"]]} cur={s.settings.killCooldown} onPick={(v) => setSetting("killCooldown", v)} />
-                <Setting label={T.sees} opts={[["decoy", T.decoy], ["hint", T.hint]]} cur={s.settings.impostorSees} onPick={(v) => setSetting("impostorSees", v)} />
-                <Setting label={T.clueTime} opts={[[30, "30s"], [40, "40s"], [60, "60s"]]} cur={s.settings.clueSecs} onPick={(v) => setSetting("clueSecs", v)} />
+                <Setting label={T.talkTime} opts={[[30, "30s"], [45, "45s"], [60, "60s"], [90, "90s"]]} cur={s.settings.talkSecs} onPick={(v) => setSetting("talkSecs", v)} />
                 <Setting label={T.voteTime} opts={[[30, "30s"], [40, "40s"], [60, "60s"]]} cur={s.settings.voteSecs} onPick={(v) => setSetting("voteSecs", v)} />
                 <Setting label={T.sabotageOpt} opts={[[1, T.on], [0, T.off]]} cur={s.settings.sabotage ? 1 : 0} onPick={(v) => setSetting("sabotage", !!v)} />
                 <Setting label={T.ventsOpt} opts={[[1, T.on], [0, T.off]]} cur={s.settings.vents ? 1 : 0} onPick={(v) => setSetting("vents", !!v)} />
@@ -300,7 +298,7 @@ export function Host({ onExit, demo = false, onPhase }: { onExit: () => void; de
                 {s.meeting.reason === "report" ? T.bodyFound : s.meeting.reason === "emergency" ? T.emergencyCalled : T.teacherCalled}
               </div>
               <h2 className="h2" style={{ marginTop: 12 }}>
-                {s.meeting.stage === "clues" ? T.clueStage : s.meeting.stage === "vote" ? T.voteStage : T.result}
+                {s.meeting.stage === "talk" ? T.talkStage : s.meeting.stage === "vote" ? T.voteStage : T.result}
               </h2>
               <div style={{ fontSize: 17, color: "rgba(242,239,230,0.7)" }}>
                 {s.meeting.reason !== "teacher" && <>{T.by} <b>{name(s.meeting.caller)}</b></>}
@@ -428,7 +426,6 @@ export function MeetingBoard({ pub, lang, me, onVote, myVote, big }: { pub: Retu
     <div>
       <div style={{ display: "grid", gridTemplateColumns: `repeat(auto-fill,minmax(min(${big ? 250 : 200}px,100%),1fr))`, gap: 10 }}>
         {pub.players.map((p) => {
-          const clue = m.clues[p.id];
           const voted = m.voted.indexOf(p.id) !== -1;
           const votes = tally[p.id] || 0;
           const clickable = canVote && p.alive && p.id !== me;
@@ -439,7 +436,7 @@ export function MeetingBoard({ pub, lang, me, onVote, myVote, big }: { pub: Retu
               <LingoBadge look={p.look} size={big ? 58 : 44} ghost={!p.alive} seed={p.id} scared={m.stage === "result" && votes > 0} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 800, fontSize: big ? 20 : 16, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.teacher ? "🎓 " : ""}{p.name}{p.id === me ? (lang === "es" ? " (tú)" : " (you)") : ""}</div>
-                <div style={{ font: "700 15px 'Space Mono',monospace", color: clue ? "#f5c518" : "rgba(242,239,230,0.3)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.alive ? clue || "…" : "☠"}</div>
+                {!p.alive && <div style={{ font: "700 15px 'Space Mono',monospace", color: "rgba(242,239,230,0.5)" }}>☠</div>}
                 {m.stage === "result" && votes > 0 && (
                   <div style={{ display: "flex", gap: 2, flexWrap: "wrap", marginTop: 4 }}>
                     {Object.entries(m.votes || {}).filter(([, t]) => t === p.id).map(([voter], k) => {
@@ -476,7 +473,7 @@ export function EjectScene({ pub, lang, impLeft }: { pub: ReturnType<typeof E.pu
   const line = p ? `${p.name} ${ej.wasImpostor ? T.wasImp : T.wasNot}` : `${T.noEject} ${ej.tie ? T.tie : T.skipped}`;
   return (
     <div>
-      <Hatch caught={ej.wasImpostor} verdict={p ? (ej.wasImpostor ? T.impostor : T.crew) : T.result} line={line}>
+      <Hatch caught={ej.wasImpostor} verdict={p ? (ej.wasImpostor ? "📱 " + T.impostor : "📚 " + T.crew) : T.result} line={line}>
         {p && <div style={{ animation: "flyOut 3.2s ease-in 1.2s both", display: "flex", justifyContent: "center", marginBottom: 6 }}><LingoBadge look={p.look} size={70} /></div>}
       </Hatch>
       {impLeft !== undefined && <div style={{ textAlign: "center", marginTop: 16, font: "700 14px 'Space Mono',monospace", color: "rgba(242,239,230,0.7)" }}>{impLeft} {T.impLeft}</div>}
@@ -494,16 +491,8 @@ export function EndScreen({ pub, lang, onAgain }: { pub: ReturnType<typeof E.pub
       <div style={{ width: "min(1000px,100%)", display: "flex", flexDirection: "column", gap: 20 }}>
         <Hatch caught={crewWin} verdict={why} line={pub.winner ? (crewWin ? T.crewWins : T.impWins) : T.end} />
         <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-          <div className="well" style={{ padding: "12px 18px" }}>
-            <div className="lbl">{T.word}</div>
-            <div style={{ font: "400 28px 'Archivo Black',sans-serif" }}>{pub.word}</div>
-          </div>
-          <div className="well" style={{ padding: "12px 18px", background: "#2a1a15" }}>
-            <div className="lbl">{T.theDecoy}</div>
-            <div style={{ font: "400 28px 'Archivo Black',sans-serif", color: "#f0947a" }}>{pub.decoy}</div>
-          </div>
-          <div className="well" style={{ padding: "12px 18px", display: "flex", alignItems: "center", gap: 10 }}>
-            <div className="lbl">{T.impostor}</div>
+          <div className="well" style={{ padding: "12px 18px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <div className="lbl">📱 {T.impostorsName}</div>
             {imps.map((p) => <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 800 }}><LingoBadge look={p.look} size={34} />{p.name}</div>)}
           </div>
         </div>
@@ -514,7 +503,7 @@ export function EndScreen({ pub, lang, onAgain }: { pub: ReturnType<typeof E.pub
               <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 8px", border: "3px solid #0e1113", borderRadius: 4, background: "#20262a" }}>
                 <span style={{ font: "700 13px 'Space Mono',monospace", color: "#f5c518", minWidth: 22 }}>{i + 1}</span>
                 <LingoBadge look={p.look} size={30} />
-                <span style={{ flex: 1, fontWeight: 800 }}>{p.name}{p.role === "impostor" ? " ☠" : ""}</span>
+                <span style={{ flex: 1, fontWeight: 800 }}>{p.name}{p.role === "impostor" ? " 📱" : ""}</span>
                 {p.earned ? <span style={{ font: "700 12px 'Space Mono',monospace", color: "#7bbf5a" }}>+{p.earned}</span> : null}
                 <span style={{ font: "400 20px 'Archivo Black',sans-serif", color: "#f5c518" }}>{p.score}</span>
               </div>
