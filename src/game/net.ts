@@ -10,7 +10,14 @@ export function relayBase(): string {
   return `${proto}://${location.hostname}:8787`;
 }
 
+/* Demo rooms (code starting with "DEMO") never touch the network: every peer lives
+   in this browser tab and messages go through this in-memory bus instead. */
+type LocalPeer = { id: string; role: "host" | "player"; deliver: (e: Envelope) => void; kick: () => void };
+const localRooms = new Map<string, Map<string, LocalPeer>>();
+export const isDemoCode = (code: string) => code.startsWith("DEMO");
+
 export class Relay {
+  private local: LocalPeer | null = null;
   private ws: WebSocket | null = null;
   private listeners = new Set<(e: Envelope) => void>();
   private statusListeners = new Set<(s: NetStatus) => void>();
@@ -21,7 +28,35 @@ export class Relay {
   status: NetStatus = "connecting";
 
   constructor(private code: string, private id: string, private role: "host" | "player") {
-    this.open();
+    if (isDemoCode(code)) this.joinLocal();
+    else this.open();
+  }
+
+  private joinLocal() {
+    if (!localRooms.has(this.code)) localRooms.set(this.code, new Map());
+    const room = localRooms.get(this.code)!;
+    room.get(this.id)?.kick();
+    const me: LocalPeer = {
+      id: this.id,
+      role: this.role,
+      deliver: (e) => this.listeners.forEach((fn) => fn(e)),
+      kick: () => { this.closed = true; this.setStatus("closed"); }
+    };
+    this.local = me;
+    room.set(this.id, me);
+    room.forEach((p) => { if (p.id !== this.id) setTimeout(() => p.deliver({ f: "_sys", d: { type: "peer-join", id: this.id, role: this.role } }), 0); });
+    this.status = "open";
+  }
+
+  private localSend(t: string | undefined, d: unknown) {
+    const room = localRooms.get(this.code);
+    if (!room || !this.local || this.closed) return;
+    const env: Envelope = { f: this.id, d: JSON.parse(JSON.stringify(d)) };
+    room.forEach((p) => {
+      if (p.id === this.id) return;
+      if (t === "host" ? p.role !== "host" : t && t !== p.id) return;
+      setTimeout(() => p.deliver(env), 0);
+    });
   }
 
   private setStatus(s: NetStatus) {
@@ -71,6 +106,7 @@ export class Relay {
 
   /* to: "host" | peer id | undefined (everyone else). Volatile messages (positions) are not queued. */
   send(d: unknown, to?: string, volatile = false) {
+    if (this.local) return this.localSend(to, d);
     this.raw(to ? { t: to, d } : { d }, !volatile);
   }
 
@@ -86,6 +122,16 @@ export class Relay {
   }
 
   close() {
+    if (this.local) {
+      const room = localRooms.get(this.code);
+      if (room?.get(this.id) === this.local) {
+        room.delete(this.id);
+        room.forEach((p) => setTimeout(() => p.deliver({ f: "_sys", d: { type: "peer-leave", id: this.id, role: this.role } }), 0));
+      }
+      this.local = null;
+      this.closed = true;
+      return;
+    }
     this.closed = true;
     if (this.ping) clearInterval(this.ping);
     try { this.ws?.close(1000); } catch { /* ignore */ }

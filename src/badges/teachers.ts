@@ -6,8 +6,8 @@ export type Hair =
   | "wavyLong" | "styledLong" | "afro" | "shortNeat" | "bob" | "straightLong" | "midCurly" | "receding"
   | "shortCurly" | "longCurly" | "emoFringe" | "slick" | "ponytail" | "sporty" | "silverNeat" | "bun";
 export type Glasses = "none" | "round" | "rect" | "cat";
-export type Outfit = "blouse" | "blazer" | "shirt" | "sweater" | "tracksuit" | "polo" | "suit" | "hoodieBlack" | "stripes" | "vest" | "cardigan";
-export type Prop = "none" | "book" | "whistle" | "coffee" | "clipboard" | "beretFR" | "pinFR" | "tattoos" | "earrings" | "scarf" | "lanyard" | "pointer";
+export type Outfit = "blouse" | "blazer" | "shirt" | "sweater" | "tracksuit" | "polo" | "suit" | "hoodieBlack" | "stripes" | "vest" | "cardigan" | "uniform";
+export type Prop = "none" | "book" | "whistle" | "coffee" | "clipboard" | "beretFR" | "pinFR" | "tattoos" | "earrings" | "scarf" | "lanyard" | "pointer" | "guardCap" | "scanner";
 
 export interface TeacherLook {
   skin: Skin;
@@ -44,7 +44,7 @@ export const TEACHERS: TeacherCard[] = [
   { id: "gabriel", name: "Gabriel", role: "Teacher", about: "Curly afro, cool glasses, great vibes.",
     look: { skin: "tan", hair: "afro", hairColor: BLACK, glasses: "round", beard: "none", smile: "soft", outfit: "shirt", top: "#3fa7d6", height: 1.04, build: "regular", props: [] } },
   { id: "sander", name: "Sander", role: "Teacher", about: "Tall, calm and always ready to explain one more time.",
-    look: { skin: "fair", hair: "shortNeat", hairColor: BROWN, glasses: "rect", beard: "none", smile: "soft", outfit: "shirt", top: "#4fb39a", height: 1.14, build: "slim", props: [] } },
+    look: { skin: "brown", hair: "shortNeat", hairColor: BLACK, glasses: "rect", beard: "none", smile: "soft", outfit: "shirt", top: "#4fb39a", height: 1.14, build: "slim", props: [] } },
   { id: "nataly", name: "Nataly", role: "Teacher", about: "Short hair, cute smile and sharp glasses.",
     look: { skin: "light", hair: "bob", hairColor: DARK, glasses: "cat", beard: "none", smile: "big", outfit: "blouse", top: "#e98fc0", height: 0.96, build: "regular", props: [] } },
   { id: "anyela", name: "Anyela", role: "Teacher", about: "Never without a good book.",
@@ -75,8 +75,8 @@ export const TEACHERS: TeacherCard[] = [
     look: { skin: "tan", hair: "silverNeat", hairColor: SILVER, glasses: "none", beard: "none", smile: "serious", outfit: "suit", top: "#2b3236", height: 1.06, build: "regular", props: [] } },
   { id: "liliana", name: "Liliana", role: "Teacher", about: "Short curly hair and coffee in hand — ready for anything.",
     look: { skin: "light", hair: "shortCurly", hairColor: CHESTNUT, glasses: "none", beard: "none", smile: "soft", outfit: "cardigan", top: "#b4441f", height: 0.92, build: "regular", props: ["coffee"] } },
-  { id: "norvey", name: "Norvey", role: "Teacher", about: "Elegant suit, serious voice — every sentence is a speech.",
-    look: { skin: "tan", hair: "slick", hairColor: BLACK, glasses: "none", beard: "none", smile: "serious", outfit: "suit", top: "#1b2023", height: 1.06, build: "regular", props: ["pointer"] } },
+  { id: "norvey", name: "Norvey", role: "Teacher", about: "Elegant suit and a big smile — every sentence is a speech.",
+    look: { skin: "tan", hair: "slick", hairColor: BLACK, glasses: "none", beard: "none", smile: "big", outfit: "suit", top: "#1b2023", height: 1.06, build: "regular", props: ["pointer"] } },
   { id: "mafe", name: "Mafe", role: "Teacher", about: "All black everything — the coolest dark style in town.",
     look: { skin: "porcelain", hair: "emoFringe", hairColor: BLACK, glasses: "none", beard: "none", smile: "smirk", outfit: "hoodieBlack", top: "#141414", height: 1, build: "slim", props: [], lips: "#4a1d2e" } },
   { id: "jhonathan", name: "Jhonathan", role: "French Teacher", about: "Bonjour! Our French teacher from Bogotá.",
@@ -84,7 +84,7 @@ export const TEACHERS: TeacherCard[] = [
   { id: "jalbleidy", name: "Jalbleidy", role: "Coordinator", about: "The coordinator: tall, confident and in charge.", special: true,
     look: { skin: "light", hair: "bun", hairColor: DARK, glasses: "none", beard: "none", smile: "smirk", outfit: "blazer", top: "#7d2f16", height: 1.12, build: "regular", props: ["clipboard", "lanyard", "earrings"], lips: "#b4441f" } },
   { id: "juanpablo", name: "Juan Pablo", role: "Teacher", about: "Elegant, glasses and tattoos — style with a story.",
-    look: { skin: "light", hair: "slick", hairColor: BROWN, glasses: "rect", beard: "short", smile: "smirk", outfit: "vest", top: "#2b3236", height: 1.06, build: "regular", props: ["tattoos"] } },
+    look: { skin: "light", hair: "slick", hairColor: BROWN, glasses: "rect", beard: "none", smile: "smirk", outfit: "vest", top: "#2b3236", height: 1.06, build: "regular", props: ["tattoos"] } },
   { id: "vanessa", name: "Vanessa", role: "French Teacher", about: "Curly and cute — she taught English, now it's French!",
     look: { skin: "light", hair: "longCurly", hairColor: BROWN, glasses: "none", beard: "none", smile: "big", outfit: "stripes", top: "#e23d4f", height: 0.98, build: "regular", props: ["pinFR"] } }
 ];
@@ -102,3 +102,9 @@ export const SKIN: Record<Skin, { c: string; d: string }> = {
 export const POINTS_PER_CARD = 4;
 /* the coordinator card only appears after this many others */
 export const SPECIAL_AFTER = 10;
+
+/* the academy's watchman (an NPC, not a collectible card) */
+export const WATCHMAN: TeacherLook = {
+  skin: "tan", hair: "shortNeat", hairColor: "#1f1a17", glasses: "none", beard: "stubble", smile: "soft",
+  outfit: "uniform", top: "#22305a", height: 1.08, build: "broad", props: ["guardCap", "scanner"]
+};

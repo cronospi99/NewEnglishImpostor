@@ -3,10 +3,10 @@ import { Relay, makeId, type NetStatus } from "./net";
 import type { EmoteMsg, FromHost, Look, PosMsg, PublicState, Secret, ToHost, VentFx } from "./types";
 import { g, type GStrings } from "./i18n";
 import { COLORS, EXTRAS, FACES, HATS, LABELS, Lingo, LingoBadge, randomLook } from "./Character";
-import { MapDefs, MapStatic, VentArt } from "./MapView";
+import { MapDefs, MapDynamic, MapStatic, VentArt, Watchman } from "./MapView";
 import {
-  ALARM_PANELS, BELL, FUSE, RANGE, SPEED, VISION, WORLD, dist, ghostMove, lineOfSight, moveWithin, roomAt, rooms,
-  sightPolygon, spawnPoint, stations, vents, type Station
+  ALARM_PANELS, BATH_DOOR, BELL, BOOK_SPOTS, FUSE, GUARD, RANGE, SCANNER, SPEED, VISION, WORLD, dist, ghostMove, lineOfSight, moveWithin, roomAt, rooms,
+  setBlocked, sightPolygon, spawnPoint, stations, vents, type Station
 } from "./map";
 import { MissionPanel } from "./MissionPanel";
 import { Center, Countdown, EjectScene, EndScreen, MeetingBoard, TaskBar } from "./Host";
@@ -22,7 +22,7 @@ type Other = { x: number; y: number; dir: number; m: boolean; dx: number; dy: nu
 type Fx = { x: number; y: number; at: number };
 export const EMOTES = ["👋", "😱", "🤔", "👍", "😂", "❗"];
 
-export function Player({ code, onExit }: { code: string; onExit: () => void }) {
+export function Player({ code, onExit, demo = false, onJoined }: { code: string; onExit: () => void; demo?: boolean; onJoined?: () => void }) {
   const teacher = useMemo(() => new URLSearchParams(location.search).get("teacher") === "1", []);
   const id = useMemo(() => {
     const k = "impostor.pid." + code + (teacher ? ".t" : "");
@@ -98,7 +98,8 @@ export function Player({ code, onExit }: { code: string; onExit: () => void }) {
       }
       if (m.k === "toast") { setToast(m.text); setTimeout(() => setToast(""), 3500); }
       if (m.k === "reward") {
-        const r = addPoints(m.id, m.points);
+        /* demo games don't count towards the real badge collection */
+        const r = demo ? { duplicate: false, unlocked: [] as string[] } : addPoints(m.id, m.points);
         if (!r.duplicate) {
           setReward({ points: m.points, items: m.items });
           if (r.unlocked.length) setTimeout(() => setReveal(r.unlocked), 3200);
@@ -150,6 +151,7 @@ export function Player({ code, onExit }: { code: string; onExit: () => void }) {
     unlockAudio();
     save(profileKey, { name, look });
     if (joined) send({ k: "look", name, look });
+    else onJoined?.();
     setJoined(true);
     setEditing(false);
   };
@@ -424,6 +426,11 @@ function PlayView({ T, lang, me, pub, secret, relay, others, mine, send, alive, 
   const [showSab, setShowSab] = useState(false);
   const [done, setDone] = useState<string[]>([]);
   const [holding, setHolding] = useState<string | null>(null);
+  const [foundBooks, setFoundBooks] = useState<number[]>([]);
+  const [hint, setHint] = useState(false);
+  const [bathBanner, setBathBanner] = useState(pub.bathLocked);
+  const scanAt = useRef(0);
+  const inScanner = useRef(false);
   const [size, setSize] = useState({ w: window.innerWidth, h: window.innerHeight });
   const joy = useRef<{ ox: number; oy: number; x: number; y: number; id: number } | null>(null);
   const keys = useRef<Record<string, boolean>>({});
@@ -521,6 +528,24 @@ function PlayView({ T, lang, me, pub, secret, relay, others, mine, send, alive, 
   const todo = myTasks.filter((s) => !doneSet.has(s.id));
   const inVent = p.v ? vents.find((v) => v.id === p.v) : undefined;
   const nearStation = !inVent ? todo.find((s) => dist(p, s) < RANGE.use) : undefined;
+  const booksTodo = todo.some((x) => x.id === "s-books");
+  const bookSpots = useMemo(() => {
+    let h = 7;
+    for (const ch of me + ":" + pub.round) h = (h * 31 + ch.charCodeAt(0)) % 100003;
+    const idx = BOOK_SPOTS.map((_, i) => i).sort((a, b) => ((a * 7919 + h) % 97) - ((b * 7919 + h) % 97));
+    return idx.slice(0, 3).map((i) => BOOK_SPOTS[i]);
+  }, [me, pub.round]);
+  if (import.meta.env.DEV) (window as any).__books = booksTodo ? bookSpots : [];
+  const booksLeft = booksTodo ? bookSpots.filter((_, i) => !foundBooks.includes(i)) : [];
+  const booksNeed = booksTodo && booksLeft.length > 0;
+  const nearBathDoor = pub.bathLocked && dist(p, { x: BATH_DOOR.x + BATH_DOOR.w / 2, y: BATH_DOOR.y + BATH_DOOR.h }) < 220;
+  const nearGuard = dist(p, GUARD) < 260;
+  const guardLook = (() => {
+    const cand = [{ x: p.x, d: dist(p, GUARD) }, ...Object.values(others.current).filter((o) => !o.v).map((o) => ({ x: o.dx, d: dist({ x: o.dx, y: o.dy }, GUARD) }))].sort((a, b) => a.d - b.d)[0];
+    return cand && cand.d < 400 ? (cand.x < GUARD.x ? -1 : 1) : (Math.sin(tNow * 0.5) > 0 ? 1 : -1);
+  })();
+  const scanAge = (performance.now() - scanAt.current) / 1000;
+  const scanFlash = scanAge < 0.7 ? 1 - scanAge / 0.7 : 0;
   const nearBell = !ghost && !inVent && (secret?.emergencyLeft || 0) > 0 && dist(p, BELL) < RANGE.bell;
   const nearFuse = !ghost && lights && dist(p, FUSE) < RANGE.fix;
   const nearPanel = !ghost && alarm ? ALARM_PANELS.find((a) => dist(p, a) < RANGE.fix) : undefined;
@@ -545,6 +570,30 @@ function PlayView({ T, lang, me, pub, secret, relay, others, mine, send, alive, 
   const shakeAge = (performance.now() - shake.current) / 1000;
   const sh = shakeAge < 0.35 ? Math.sin(shakeAge * 90) * 10 * (1 - shakeAge / 0.35) : 0;
 
+  useEffect(() => {
+    setBlocked(pub.bathLocked ? [BATH_DOOR] : []);
+    return () => setBlocked([]);
+  }, [pub.bathLocked]);
+  useEffect(() => {
+    if (!bathBanner) return;
+    const t = setTimeout(() => setBathBanner(false), 7000);
+    return () => clearTimeout(t);
+  }, [bathBanner]);
+  /* pick up missing books by walking over them */
+  useEffect(() => {
+    if (!booksTodo || ghost) return;
+    bookSpots.forEach((b, i) => {
+      if (!foundBooks.includes(i) && dist(p, b) < 70) { setFoundBooks((f) => (f.includes(i) ? f : f.concat(i))); sfx.task(); }
+    });
+  });
+  /* the scanner arch beeps whenever someone walks through it */
+  useEffect(() => {
+    const inside = (q: { x: number; y: number }) => q.x > SCANNER.x && q.x < SCANNER.x + SCANNER.w && q.y > SCANNER.y - 10 && q.y < SCANNER.y + SCANNER.h + 10;
+    const someone = (!ghost && inside(p)) || Object.values(others.current).some((o) => !o.v && inside({ x: o.dx, y: o.dy }));
+    if (someone && !inScanner.current) { scanAt.current = performance.now(); if (dist(p, SCANNER) < 500) sfx.vote(); }
+    inScanner.current = someone;
+  });
+
   /* release a held alarm panel when walking away */
   useEffect(() => {
     if (holding && (!nearPanel || nearPanel.id !== holding)) { send({ k: "hold", panel: holding, on: false }); setHolding(null); }
@@ -560,6 +609,7 @@ function PlayView({ T, lang, me, pub, secret, relay, others, mine, send, alive, 
 
   const use = () => {
     if (nearFuse) setFuse(true);
+    else if (nearStation && nearStation.id === "s-books" && booksNeed) { setHint(true); setTimeout(() => setHint(false), 2600); }
     else if (nearStation) setPanel(nearStation);
     else if (nearBell) send({ k: "emergency" });
   };
@@ -623,6 +673,22 @@ function PlayView({ T, lang, me, pub, secret, relay, others, mine, send, alive, 
           </mask>
         </defs>
         <MapStatic />
+        <MapDynamic bathLocked={pub.bathLocked} scanFlash={scanFlash} />
+        {booksLeft.map((b, i) => (
+          <g key={"book" + i} transform={`translate(${b.x},${b.y - 10 + Math.sin(tNow * 3 + i) * 5})`}>
+            <ellipse cx={0} cy={22} rx={20} ry={5} fill="rgba(0,0,0,0.3)" />
+            <rect x={-16} y={-12} width={32} height={24} rx={3} fill="#3a5bc7" stroke="#0e1113" strokeWidth={3} transform="rotate(-10)" />
+            <path d="M -10 -4 L 10 -7 M -9 2 L 8 -1" stroke="#f5c518" strokeWidth={2.5} transform="rotate(-10)" />
+            <circle r={30 + Math.sin(tNow * 5) * 3} fill="none" stroke="#3fa7d6" strokeWidth={3} strokeDasharray="6 6" />
+          </g>
+        ))}
+        <Watchman t={tNow} lookDir={guardLook} alert={nearGuard && !ghost} />
+        {nearGuard && !ghost && (
+          <g transform={`translate(${GUARD.x + 40},${GUARD.y - 200})`}>
+            <rect x={0} y={-24} width={170} height={36} rx={10} fill="#f2efe6" stroke="#0e1113" strokeWidth={3} />
+            <text x={85} y={0} textAnchor="middle" fontSize={15} fontWeight={800} fill="#0e1113">{todo.some((x) => x.id === "s-guard") ? "Security check, please!" : "Good evening! 👋"}</text>
+          </g>
+        )}
         {pub.settings.vents && imp && vents.map((v) => <VentArt key={v.id + "o"} x={v.x} y={v.y} open={inVent?.id === v.id ? 1 : 0} />)}
         {ventFx.current.map((v, i) => {
           const a = (tNow * 1000 - v.at) / 1000;
@@ -666,6 +732,11 @@ function PlayView({ T, lang, me, pub, secret, relay, others, mine, send, alive, 
         </div>
         {room && <span className="tag" style={{ color: room.accent, background: "#1b2023ee", flex: "none" }}>{room.en}</span>}
       </div>
+      {(bathBanner || nearBathDoor || hint) && !(lights || alarm) && (
+        <div style={{ position: "absolute", top: 60, left: "50%", transform: "translateX(-50%)", width: "min(92vw,460px)", padding: "8px 12px", border: "3px solid #0e1113", borderRadius: 5, background: hint ? "#3a5bc7" : "#f2efe6", color: hint ? "#fff" : "#0e1113", font: "700 13px 'Space Mono',monospace", textAlign: "center", zIndex: 5, animation: "popIn .3s" }}>
+          {hint ? `📘 ${3 - booksLeft.length}/3 — ${T.booksHint}` : `🚫💩 ${T.bathLocked}`}
+        </div>
+      )}
       {(lights || alarm) && (
         <div style={{ position: "absolute", top: 60, left: "50%", transform: "translateX(-50%)", width: "min(92vw,460px)", padding: "8px 12px", border: "3px solid #0e1113", borderRadius: 5, background: "#b4441f", color: "#fff3e0", font: "700 13px 'Space Mono',monospace", textAlign: "center", animation: "blink 1s infinite", zIndex: 5 }}>
           {alarm ? `🚨 ${Math.ceil((pub.sabotage!.msLeft - (nowMs - pub.at)) / 1000)}s — ${T.alarmMsg}` : `💡 ${T.lightsMsg}`}
@@ -681,7 +752,7 @@ function PlayView({ T, lang, me, pub, secret, relay, others, mine, send, alive, 
             {myTasks.map((s) => {
               const r = rooms.find((x) => x.id === s.room)!;
               const ok = doneSet.has(s.id);
-              return <div key={s.id} style={{ color: ok ? "#7bbf5a" : "#f2efe6", textDecoration: ok ? "line-through" : "none" }}>{ok ? "✓" : "•"} {r.en}: {s.label}</div>;
+              return <div key={s.id} style={{ color: ok ? "#7bbf5a" : "#f2efe6", textDecoration: ok ? "line-through" : "none" }}>{ok ? "✓" : "•"} {r.en}: {s.label}{s.id === "s-books" && !ok ? ` (📘 ${3 - booksLeft.length}/3)` : ""}</div>;
             })}
             {ghost && <div style={{ color: "#f5c518", marginTop: 4 }}>{T.ghost}</div>}
           </div>

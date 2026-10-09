@@ -4,7 +4,7 @@ export interface MCQ { q: string; say?: string; options: string[]; a: number }
 
 export interface MissionDef {
   id: string;
-  kind: "mcq" | "sort" | "order" | "spot";
+  kind: "mcq" | "sort" | "order" | "spot" | "ac" | "books" | "security";
   en: string;
   es: string;
   howEn: string;
@@ -23,7 +23,11 @@ export const missionDefs: Record<string, MissionDef> = {
   spot: { id: "spot", kind: "spot", en: "Mark the test", es: "Corrige el examen", howEn: "Tap the word with a spelling mistake.", howEs: "Toca la palabra mal escrita.", rounds: 2 },
   gap: { id: "gap", kind: "mcq", en: "Exam paper", es: "Hoja de examen", howEn: "Complete the gap.", howEs: "Completa el hueco.", rounds: 3 },
   levels: { id: "levels", kind: "order", en: "File certificates", es: "Archiva certificados", howEn: "File the certificates from lowest to highest level.", howEs: "Archiva los certificados del nivel más bajo al más alto.", rounds: 1 },
-  reply: { id: "reply", kind: "mcq", en: "Small talk", es: "Charla", howEn: "Keep the conversation going.", howEs: "Sigue la conversación.", rounds: 3 }
+  reply: { id: "reply", kind: "mcq", en: "Small talk", es: "Charla", howEn: "Keep the conversation going.", howEs: "Sigue la conversación.", rounds: 3 },
+  ac: { id: "ac", kind: "ac", en: "Fix the AC", es: "Arregla el aire", howEn: "Read the temperature the teacher wants, set the thermostat and restart the AC.", howEs: "Lee la temperatura que pide el profe, ajusta el termostato y reinicia el aire.", rounds: 1 },
+  books: { id: "books", kind: "books", en: "The missing books", es: "Los libros perdidos", howEn: "Put the students' books back on the shelf in alphabetical order.", howEs: "Devuelve los libros a la estantería en orden alfabético.", rounds: 1 },
+  security: { id: "security", kind: "security", en: "Security check", es: "Control de seguridad", howEn: "Answer the watchman, then stand still for the scanner.", howEs: "Responde al vigilante y quédate quieto para el escáner.", rounds: 3 },
+  sign: { id: "sign", kind: "mcq", en: "Fix the bathroom sign", es: "Arregla el letrero del baño", howEn: "Choose the right word for each sign.", howEs: "Elige la palabra correcta para cada letrero.", rounds: 3 }
 };
 
 const m = (q: string, options: string[], a = 0, say?: string): MCQ => ({ q, options, a, say });
@@ -53,11 +57,27 @@ export const mcqBank: Record<string, Record<Tier, MCQ[]>> = {
     easy: [m("“I'm good ___ English.”", ["at", "in", "on", "for"]), m("“The exam is ___ Friday.”", ["on", "in", "at", "to"]), m("“Turn ___ your phones, please.”", ["off", "of", "out", "down"]), m("“My birthday is ___ May.”", ["in", "on", "at", "for"]), m("“Listen ___ the teacher.”", ["to", "at", "for", "on"]), m("“Write your name ___ the top.”", ["at", "on", "in", "by"])],
     hard: [m("“She's in charge ___ the new branch.”", ["of", "for", "with", "on"]), m("“The results depend ___ your effort.”", ["on", "of", "from", "at"]), m("“He's been accused ___ cheating.”", ["of", "for", "about", "with"]), m("“Let's take ___ account the cost.”", ["into", "in", "on", "onto"]), m("“The plan fell ___ at the last minute.”", ["through", "down", "out", "off"]), m("“I'm not used ___ getting up so early.”", ["to", "for", "with", "at"])]
   },
+  security: {
+    easy: [m("Watchman: “Good evening! Can I see your student card?”", ["Sure, here you are.", "Yes, I can see.", "No, it's mine.", "I'm a card."]), m("Watchman: “Where are you going?”", ["To my English class.", "At eight o'clock.", "Yes, I am.", "With a pencil."]), m("Watchman: “What's your name, please?”", ["My name's Sam.", "I'm fine, thanks.", "It's blue.", "Yes, please."]), m("Watchman: “Is this your bag?”", ["Yes, it is.", "Yes, I am.", "No, it isn't me.", "It's a bag, yes."]), m("Watchman: “Please walk through the scanner.”", ["OK, no problem.", "I walk yesterday.", "The scanner is me.", "Thanks, you too."]), m("Watchman: “Have a good class!”", ["Thanks! Have a good night.", "Yes, I have.", "Good class is good.", "No, thank you."])],
+    hard: [m("Watchman: “Excuse me, have you signed in at reception?”", ["Not yet — I'll do it right away.", "Yes, I have sign.", "Reception is over there, yes.", "I'm signing yesterday."]), m("Watchman: “I'm afraid you can't bring food into the classrooms.”", ["Oh, sorry — I'll finish it outside.", "I'm afraid too.", "Food is not a classroom.", "Yes, I can't bring."]), m("Watchman: “Could you open your bag for me, please?”", ["Of course, go ahead.", "Yes, I could open.", "My bag is opened.", "Open it yourself."]), m("Watchman: “Has anyone suspicious come this way?”", ["I think I saw someone near the vents.", "Yes, suspicious came.", "I am this way.", "Nobody has came."]), m("Watchman: “Would you mind waiting a moment?”", ["Not at all.", "Yes, I mind waiting.", "I'm waiting a moment ago.", "Moment is fine."]), m("Watchman: “The scanner beeped. Are you carrying any keys?”", ["Oh yes, sorry — here they are.", "The keys are beeping me.", "I carry no keys yesterday.", "Beep is normal."])]
+  },
+  sign: {
+    easy: [m("🚹", ["Men", "Women", "Kids", "Exit"]), m("🚺", ["Women", "Men", "Staff", "Kitchen"]), m("🧼", ["Soap", "Towel", "Toilet", "Mirror"]), m("🧻", ["Toilet paper", "Newspaper", "Notebook", "Napkin"]), m("Wash your ___!", ["hands", "feet", "books", "phone"]), m("⚠️ Wet ___", ["floor", "door", "window", "ceiling"])],
+    hard: [m("Please ___ the toilet after use.", ["flush", "wash", "close", "drink"]), m("Out of ___ 🚫", ["order", "service", "place", "time"]), m("Do not ___ paper towels in the toilet.", ["throw", "throws", "threw", "throwing"]), m("Caution: ___ floor.", ["slippery", "slipped", "slips", "slip"]), m("These facilities are ___ for staff only.", ["reserved", "reserve", "reserving", "reservation"]), m("Please report any ___ to reception.", ["problems", "problem's", "problematic", "problemed"])]
+  },
   reply: {
     easy: [m("“Hi! How are you?”", ["I'm fine, thanks. And you?", "I'm twenty.", "Yes, I am.", "It's Monday."]), m("“Where are you from?”", ["I'm from Colombia.", "I'm fine.", "From nine to five.", "Yes, please."]), m("“What's your favourite food?”", ["Pizza, definitely!", "I'm hungry yes.", "On the table.", "It's my food."]), m("“Nice to meet you.”", ["Nice to meet you too.", "I'm meet.", "Yes, nice.", "Goodbye, thanks."]), m("“Do you like music?”", ["Yes, I love rock.", "Yes, it is.", "No, I'm music.", "At eight."]), m("“See you tomorrow!”", ["See you!", "Tomorrow is Tuesday.", "Yes, I see.", "Me neither."])],
     hard: [m("“Lovely weather today, isn't it?”", ["Isn't it just? Perfect for a walk.", "Yes, it isn't.", "The weather is a noun.", "No, it's Tuesday."]), m("“So, what do you do for a living?”", ["I'm a nurse — I work night shifts.", "I live for living.", "I do my homework.", "Yes, I do."]), m("“Have you been here before?”", ["Only once, ages ago.", "Yes, I have been before here.", "Before what?", "No, I'm here now."]), m("“I can't believe it's Friday already!”", ["Tell me about it — this week flew by.", "Believe it, it's Thursday.", "Yes, I can't.", "Fridays are days."]), m("“Any plans for the weekend?”", ["Nothing much, just catching up on sleep.", "Yes, I plan weekends.", "The weekend has two days.", "I planned it yesterday tomorrow."])]
   }
 };
+
+export const ACMSG = {
+  numbers: ["sixteen", "seventeen", "eighteen", "nineteen", "twenty", "twenty-one", "twenty-two", "twenty-three", "twenty-four"],
+  hot: ["It's boiling in here!", "We're melting!", "It's like an oven!", "I'm sweating like crazy!"],
+  fail: ["BZZZT! 💥 It broke again…", "Click… clunk… 💨 Nope. Broken again.", "It worked for 3 seconds! Then: 💥", "Error 404: cold air not found."]
+};
+
+export const BOOK_TITLES = ["Grammar in Use", "English File", "Oxford Picture Dictionary", "Cambridge Exam Practice", "Phrasal Verbs Workbook", "Reading Explorer", "Speakout", "Vocabulary Builder", "Headway", "Top Notch", "Business Result", "Kid's Box"];
 
 export const sortBank: Record<Tier, { bins: string[]; items: [string, number][] }[]> = {
   easy: [

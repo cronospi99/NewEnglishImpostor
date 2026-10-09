@@ -16,9 +16,16 @@ A word game for English classes, with two modes:
 7. **Meetings** start when someone reports a body (**Report**), rings the emergency bell in Reception, or the teacher presses **Call meeting**. Everyone types one word about the secret word, then votes on their phone. The projector shows the clues, the votes and the ejection.
 8. Eliminated players become ghosts and keep doing missions.
 
+### The academy's special places
+
+- **Reception lobby:** the game starts here. It is surrounded by **4 sales offices** with glass walls (you can see through them, but you can only walk in through their doors).
+- **Bathrooms:** in about **1 game in 5** they're locked: "🚫💩 OUT OF ORDER — It's been bad-pooped!" The door is taped shut and everyone gets a warning when the shift starts.
+- **The watchman:** stands with his scanner arch at the lobby's south door. The arch beeps whenever someone walks through it, and he turns to look at whoever is nearby.
+- **The AC** in the Adults Classroom is always broken (smoke and "AC BROKEN").
+
 ### The map
 
-There are 11 rooms, and each room's sign shows its English and Spanish names. Every room has one mission:
+There are 12 rooms plus 4 sales offices, and each room's sign shows its English and Spanish names. Every room has one mission:
 
 | Room | Mission |
 | --- | --- |
@@ -33,10 +40,24 @@ There are 11 rooms, and each room's sign shows its English and Spanish names. Ev
 | Exam Room | Exam paper (gap fill) |
 | Director's Office | File certificates (CEFR levels in order) |
 | Speaking Corner | Small talk (conversation replies) |
+| Adults Classroom | **Fix the AC** — set the thermostat to the number the teacher says *in words* ("twenty-two degrees"), restart it… and it always breaks again. Trying still counts! |
+| Library + whole map | **The missing books** — find 3 lost student books hidden around the academy (blue books, only you see yours), then shelve them in alphabetical order |
+| South door | **Security check** — answer the watchman's questions, then stand still for the scanner |
+| Bathrooms | **Fix the bathroom sign** — bathroom vocabulary (not assigned when the bathrooms are locked) |
 
 Missions use easy content at A1–A2 and harder content at B1–C1. "Mixed" uses both. When a student finishes a mission, the game tells them what that room is used for.
 
 All character and map art is original SVG drawn in code (`src/game/Character.tsx`, `src/game/MapView.tsx`). There are no external image assets.
+
+## Demo mode (try it alone)
+
+Choose **Demo** on the home page, or go to `/demo`. You play videogame mode on one device against 5 bots, with no phones, QR codes or relay server needed. Everything runs in your browser tab.
+
+1. Design your character and press **Join the shift**. The projector screen opens with the bots already in the lobby.
+2. Press **Start the shift**. The view switches to your phone screen. Use the **📽 Projector / 📱 Phone** toggle at the top to switch between the two at any time.
+3. The bots walk around the academy, do missions, eliminate (when they're the impostor), report bodies, fix sabotage, type clues, chat and vote.
+
+Demo games don't add points to your badge collection.
 
 ## Among Us–style mechanics (videogame mode)
 

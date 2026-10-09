@@ -121,6 +121,8 @@ export interface HostState {
   log: string[];
   sabotage: Sabotage | null;
   sabotageReadyAt: number;
+  /* ~20% of games: "it's been bad-pooped" */
+  bathLocked: boolean;
   /* last kill, for the impact effect on phones */
   lastKill: { x: number; y: number; at: number; victim: string } | null;
 }
@@ -159,6 +161,7 @@ export interface PublicState {
   word?: string;
   decoy?: string;
   sabotage: { kind: SabotageKind; msLeft: number; held: string[] } | null;
+  bathLocked: boolean;
   lastKill: { x: number; y: number; ago: number; victim: string } | null;
 }
 

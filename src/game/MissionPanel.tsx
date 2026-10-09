@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { pick, shuffle } from "../shared/random";
 import type { Lang } from "../shared/proximity";
-import { mcqBank, missionDefs, orderBank, sortBank, spotBank, tierFor, type MCQ } from "./missions";
+import { ACMSG, BOOK_TITLES, mcqBank, missionDefs, orderBank, sortBank, spotBank, tierFor, type MCQ } from "./missions";
 import { rooms, type Station } from "./map";
 import { sfx } from "./sfx";
 import { Fit } from "../shared/Fit";
@@ -53,8 +53,14 @@ export function MissionPanel({ station, level, lang, fake, onDone, onClose }: Pr
               </div>
               <button type="button" className="btn btn-y" onClick={onClose}>OK</button>
             </div>
-          ) : def.kind === "mcq" ? (
+          ) : def.kind === "mcq" || (def.kind === "security" && round < def.rounds - 1) ? (
             <McqTask key={round} id={station.mission} tiers={tiers} onWin={win} onMiss={miss} lang={lang} />
+          ) : def.kind === "security" ? (
+            <ScanTask onWin={win} lang={lang} />
+          ) : def.kind === "ac" ? (
+            <AcTask onWin={win} onMiss={miss} lang={lang} />
+          ) : def.kind === "books" ? (
+            <BooksTask tiers={tiers} onWin={win} onMiss={miss} />
           ) : def.kind === "sort" ? (
             <SortTask tiers={tiers} onWin={win} onMiss={miss} />
           ) : def.kind === "order" ? (
@@ -221,6 +227,107 @@ function Confetti() {
       {bits.map((b, i) => (
         <span key={i} style={{ position: "absolute", left: b.x + "%", top: -10, width: 8, height: 12, background: b.c, border: "1.5px solid #0e1113", transform: `rotate(${b.r}deg)`, animation: `confetti ${b.d}s ease-in ${b.delay}s both` }} />
       ))}
+    </div>
+  );
+}
+
+/* Fix the AC: set the thermostat to the number the teacher says (in words), restart…
+   and watch it break again. Trying still counts. */
+function AcTask({ onWin, onMiss, lang }: { onWin: () => void; onMiss: () => void; lang: Lang }) {
+  const [target] = useState(() => 16 + Math.floor(Math.random() * ACMSG.numbers.length));
+  const [temp, setTemp] = useState(() => 29 + Math.floor(Math.random() * 6));
+  const [phase, setPhase] = useState<"set" | "cooling" | "broken">("set");
+  const [hot] = useState(() => pick(ACMSG.hot));
+  const [fail] = useState(() => pick(ACMSG.fail));
+  const winRef = useRef(onWin);
+  winRef.current = onWin;
+  useEffect(() => {
+    if (phase === "cooling") { const t = setTimeout(() => { setPhase("broken"); sfx.sabotage(); }, 1800); return () => clearTimeout(t); }
+    if (phase === "broken") { const t = setTimeout(() => winRef.current(), 2200); return () => clearTimeout(t); }
+  }, [phase]);
+  const restart = () => {
+    if (temp !== target) { onMiss(); return; }
+    sfx.step();
+    setPhase("cooling");
+  };
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
+      <div style={{ fontSize: 15, color: "rgba(242,239,230,0.8)", textAlign: "center" }}>
+        🧑‍🏫 “{hot} {lang === "es" ? "Ponlo en" : "Set it to"} <b style={{ color: "#f5c518" }}>{ACMSG.numbers[target - 16]}</b> {lang === "es" ? "grados, por favor." : "degrees, please!"}”
+      </div>
+      <div style={{ width: 240, border: "4px solid #0e1113", borderRadius: 10, background: "#e6e2d6", padding: 12, color: "#0e1113", position: "relative", overflow: "hidden", animation: phase === "broken" ? "shake .2s 5" : "none" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span style={{ font: "700 11px 'Space Mono',monospace" }}>COOLMASTER 3000</span>
+          <span style={{ width: 10, height: 10, borderRadius: "50%", background: phase === "broken" ? "#e23d4f" : phase === "cooling" ? "#7bbf5a" : "#f5c518", border: "2px solid #0e1113" }} />
+        </div>
+        <div style={{ margin: "10px 0", padding: "8px 0", borderRadius: 6, background: "#1b2023", textAlign: "center", font: "400 44px 'Space Mono',monospace", color: phase === "broken" ? "#e23d4f" : "#7bbf5a" }}>
+          {phase === "broken" ? "ERR" : `${temp}°C`}
+        </div>
+        <div style={{ display: "flex", justifyContent: "center", fontSize: 34, height: 40 }}>
+          <span style={{ display: "inline-block", animation: phase === "cooling" ? "spin .4s linear infinite" : "none" }}>{phase === "broken" ? "💥" : "🌀"}</span>
+        </div>
+      </div>
+      {phase === "set" && (
+        <div style={{ display: "flex", gap: 8 }}>
+          <button type="button" className="sq btn-s" onClick={() => { setTemp((t) => Math.max(14, t - 1)); sfx.step(); }}>−</button>
+          <button type="button" className="sq btn-s" onClick={() => { setTemp((t) => Math.min(35, t + 1)); sfx.step(); }}>+</button>
+          <button type="button" className="btn btn-y" onClick={restart}>{lang === "es" ? "Reiniciar" : "Restart"}</button>
+        </div>
+      )}
+      {phase === "cooling" && <div style={{ font: "700 15px 'Space Mono',monospace", color: "#3fa7d6" }}>❄️ {lang === "es" ? "Enfriando…" : "Cooling…"}</div>}
+      {phase === "broken" && <div style={{ font: "400 18px 'Archivo Black',sans-serif", color: "#e23d4f", textAlign: "center" }}>{fail}<div style={{ font: "600 13px Archivo,sans-serif", color: "rgba(242,239,230,0.7)", marginTop: 4 }}>{lang === "es" ? "Bueno… lo intentaste. ¡Cuenta!" : "Well… you tried. That counts!"}</div></div>}
+    </div>
+  );
+}
+
+/* the found books go back on the shelf in alphabetical order */
+function BooksTask({ tiers, onWin, onMiss }: TaskProps) {
+  const n = tiers.includes("hard") ? 4 : 3;
+  const [books] = useState(() => shuffle(BOOK_TITLES).slice(0, n));
+  const target = [...books].sort((a, b) => a.localeCompare(b));
+  const [shelf, setShelf] = useState<string[]>([]);
+  const colors = ["#e23d4f", "#3a5bc7", "#2fb3a0", "#f07a1a"];
+  const tap = (b: string) => {
+    if (b !== target[shelf.length]) { onMiss(); return; }
+    const next = shelf.concat(b);
+    setShelf(next);
+    sfx.step();
+    if (next.length === target.length) setTimeout(onWin, 350);
+  };
+  return (
+    <div>
+      <div style={{ minHeight: 120, display: "flex", alignItems: "flex-end", gap: 6, padding: "10px 12px", border: "3px solid #0e1113", borderRadius: 5, background: "#6b4a2e", marginBottom: 12 }}>
+        {shelf.map((b) => (
+          <div key={b} style={{ width: 44, height: 104, border: "2px solid #0e1113", borderRadius: 3, background: colors[books.indexOf(b) % 4], writingMode: "vertical-rl", transform: "rotate(180deg)", font: "700 11px Archivo,sans-serif", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", animation: "popIn .2s" }}>{b}</div>
+        ))}
+      </div>
+      <div className="row" style={{ justifyContent: "center" }}>
+        {books.filter((b) => !shelf.includes(b)).map((b) => (
+          <button key={b} type="button" className="opt off" style={{ textTransform: "none", letterSpacing: 0, fontSize: 15, background: colors[books.indexOf(b) % 4], color: "#fff" }} onClick={() => tap(b)}>📘 {b}</button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* stand still while the watchman's scanner passes over you */
+function ScanTask({ onWin, lang }: { onWin: () => void; lang: Lang }) {
+  const [done, setDone] = useState(false);
+  const winRef = useRef(onWin);
+  winRef.current = onWin;
+  useEffect(() => {
+    const a = setTimeout(() => { setDone(true); sfx.vote(); }, 2200);
+    const b = setTimeout(() => winRef.current(), 3000);
+    return () => { clearTimeout(a); clearTimeout(b); };
+  }, []);
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+      <div style={{ position: "relative", width: 180, height: 170, border: "4px solid #0e1113", borderRadius: 8, background: "#1b2023", overflow: "hidden" }}>
+        <div style={{ position: "absolute", left: 50, top: 20, width: 80, height: 130, borderRadius: "40px 40px 12px 12px", background: "#3b4349", border: "3px solid #0e1113" }} />
+        {!done && <div style={{ position: "absolute", left: 0, right: 0, height: 6, background: "#7bbf5a", boxShadow: "0 0 18px #7bbf5a", animation: "scanBeam 1.1s ease-in-out infinite alternate" }} />}
+        {done && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 54, animation: "popIn .3s" }}>✅</div>}
+      </div>
+      <div style={{ font: "700 14px 'Space Mono',monospace", color: done ? "#7bbf5a" : "#f5c518" }}>{done ? (lang === "es" ? "¡Despejado! Puedes pasar." : "Cleared! You can go in.") : (lang === "es" ? "No te muevas…" : "Hold still…")}</div>
     </div>
   );
 }

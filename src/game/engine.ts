@@ -23,7 +23,7 @@ export function createState(code: string): HostState {
   return {
     code, phase: "lobby", settings: { ...defaultSettings }, players: [], bodies: [], entry: null,
     meeting: null, eject: null, winner: null, winReason: "", phaseEndsAt: 0, round: 0,
-    prevImpostors: [], usedWords: [], log: [], sabotage: null, sabotageReadyAt: 0, lastKill: null
+    prevImpostors: [], usedWords: [], log: [], sabotage: null, sabotageReadyAt: 0, lastKill: null, bathLocked: false
   };
 }
 
@@ -114,11 +114,13 @@ export function startGame(s: HostState, now: number): Out[] {
   s.sabotage = null;
   s.sabotageReadyAt = now + REVEAL_MS + FIRST_SABOTAGE_MS;
   s.lastKill = null;
-  const nTasks = Math.max(1, Math.min(stations.length, st.tasksPerPlayer));
+  s.bathLocked = randInt(5) === 0;
+  const pickable = stations.filter((x) => !(s.bathLocked && x.room === "bath")).map((x) => x.id);
+  const nTasks = Math.max(1, Math.min(pickable.length, st.tasksPerPlayer));
   s.players.forEach((p) => {
     p.alive = true;
     p.role = imps.indexOf(p.id) !== -1 ? "impostor" : "crew";
-    p.tasks = shuffle(stations.map((x) => x.id)).slice(0, nTasks);
+    p.tasks = shuffle(pickable).slice(0, nTasks);
     p.done = [];
     p.emergencyLeft = st.emergencies;
     p.killReadyAt = now + REVEAL_MS + START_COOLDOWN_MS;
@@ -464,6 +466,7 @@ export function publicState(s: HostState, now: number): PublicState {
       msLeft: s.sabotage.endsAt ? Math.max(0, s.sabotage.endsAt - now) : 0,
       held: Object.keys(s.sabotage.holds).filter((k) => s.sabotage!.holds[k].length > 0)
     } : null,
+    bathLocked: !!s.bathLocked,
     lastKill: s.lastKill && now - s.lastKill.at < 4000 ? { x: s.lastKill.x, y: s.lastKill.y, ago: now - s.lastKill.at, victim: s.lastKill.victim } : null
   };
 }

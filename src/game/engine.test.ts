@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import * as E from "./engine";
-import { ALARM_PANELS, BELL, FUSE, RANGE, WORLD, dist, lineOfSight, spawnPoint, stations, vents, walkable } from "./map";
+import { ALARM_PANELS, BATH_DOOR, BELL, BOOK_SPOTS, FUSE, GUARD, RANGE, WORLD, dist, lineOfSight, offices, setBlocked, spawnPoint, stations, vents, walkable } from "./map";
 import type { HostState, Look, Pos } from "./types";
 
 const look: Look = { color: 0, hat: "none", face: "none", extra: "none" };
@@ -197,6 +197,20 @@ describe("engine", () => {
     expect(c.points).toBe(crew[0].tasks.length + E.POINTS.crewWin + 1);
   });
 
+  it("locks the bathrooms in roughly one game out of five and never assigns the bathroom mission then", () => {
+    let locked = 0;
+    for (let k = 0; k < 400; k++) {
+      const s = game(5);
+      if (s.bathLocked) {
+        locked++;
+        expect(s.players.some((p) => p.tasks.includes("s-bath"))).toBe(false);
+      }
+      expect(E.publicState(s, 0).bathLocked).toBe(s.bathLocked);
+    }
+    expect(locked).toBeGreaterThan(40);
+    expect(locked).toBeLessThan(130);
+  });
+
   it("teacher can join as a regular player", () => {
     const s = E.createState("ABCD");
     E.hello(s, "t1", "Teacher", look, true);
@@ -261,6 +275,23 @@ describe("map", () => {
   it("walls block line of sight but doors don't", () => {
     expect(lineOfSight({ x: 350, y: 300 }, { x: 350, y: 620 })).toBe(true);
     expect(lineOfSight({ x: 200, y: 300 }, { x: 200, y: 620 })).toBe(false);
+  });
+
+  it.each(BOOK_SPOTS.map((b, i) => [i, b] as const))("book spot %i is reachable", (_i, b) => {
+    expect(reachableNear(b, 50)).toBe(true);
+  });
+
+  it("every sales office can be entered from the lobby", () => {
+    offices.forEach((o) => expect(reachableNear({ x: o.r.x + o.r.w / 2, y: o.r.y + o.r.h / 2 }, 40), o.id).toBe(true));
+  });
+
+  it("the watchman can be reached and a locked bathroom door blocks the way", () => {
+    expect(reachableNear(GUARD, RANGE.use - 20)).toBe(true);
+    const mid = { x: BATH_DOOR.x + BATH_DOOR.w / 2, y: BATH_DOOR.y + BATH_DOOR.h / 2 };
+    expect(walkable(mid.x, mid.y)).toBe(true);
+    setBlocked([BATH_DOOR]);
+    expect(walkable(mid.x, mid.y)).toBe(false);
+    setBlocked([]);
   });
 
   it("emergency bell is reachable", () => {

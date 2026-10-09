@@ -18,6 +18,7 @@ const S = {
     classicTag: "No phones needed",
     video: "Videogame", videoP: "Everyone joins from their phone, walks around the academy, completes English missions, sabotages, eliminates — and votes the impostor out.",
     videoTag: "Phones · QR code",
+    demo: "Demo", demoP: "Try videogame mode on your own right now: you play against five bots on this device. Nothing to install, no phones needed.", demoTag: "Solo · bots",
     back: "← Back"
   },
   es: {
@@ -32,6 +33,7 @@ const S = {
     classicTag: "Sin móviles",
     video: "Videojuego", videoP: "Todos entran desde el móvil, recorren la academia, hacen misiones de inglés, sabotean, eliminan… y expulsan al impostor.",
     videoTag: "Móviles · código QR",
+    demo: "Demo", demoP: "Prueba el modo videojuego tú solo ahora mismo: juegas contra cinco bots en este dispositivo. Sin instalar nada y sin móviles.", demoTag: "Solo · bots",
     back: "← Atrás"
   }
 };
@@ -118,13 +120,14 @@ export function Home({ lang, setLang, go }: { lang: Lang; setLang: (l: Lang) => 
         </div></Fit>
       ) : (
         <Fit key="modes"><div style={{ position: "relative", zIndex: 2, display: "flex", flexDirection: "column", alignItems: "center", padding: "64px 16px 16px", gap: 22 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 14, width: "min(1100px,100%)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 14, width: "min(1300px,100%)" }}>
             <button type="button" className="btn btn-s btn-sm" onClick={() => setStep("hero")}>{T.back}</button>
             <h2 className="h2" style={{ margin: 0 }}>{T.choose}</h2>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(340px,100%),1fr))", gap: 22, width: "min(1100px,100%)" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(300px,100%),1fr))", gap: 22, width: "min(1300px,100%)" }}>
             <ModeCard title={T.classic} text={T.classicP} tag={T.classicTag} color="#f5c518" looks={[CROWD[0], CROWD[1], CROWD[3]]} onClick={() => go("/classic")} icon="📽" />
             <ModeCard title={T.video} text={T.videoP} tag={T.videoTag} color="#f07a1a" looks={[CROWD[2], CROWD[4], CROWD[5]]} onClick={() => go("/host")} icon="🎮" />
+            <ModeCard title={T.demo} text={T.demoP} tag={T.demoTag} color="#c9a2ff" looks={[CROWD[6], CROWD[7], CROWD[3]]} onClick={() => go("/demo")} icon="🤖" />
           </div>
         </div></Fit>
       )}

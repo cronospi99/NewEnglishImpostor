@@ -163,6 +163,19 @@ function Torso({ l, sw, top, bottom }: { l: TeacherLook; sw: number; top: number
       );
     case "vest":
       return <g><rect x={-sw} y={top} width={sw * 2} height={h + 4} rx={13} fill="#f2efe6" stroke={K} strokeWidth={3.5} /><path d={`M -${sw} ${top + 10} L -6 ${bottom + 2} L -${sw - 2} ${bottom + 2} Z M ${sw} ${top + 10} L 6 ${bottom + 2} L ${sw - 2} ${bottom + 2} Z`} fill={c} stroke={K} strokeWidth={2.5} /><path d={`M -${sw - 4} ${top + 4} L -6 ${top + 30} L -6 ${bottom} M ${sw - 4} ${top + 4} L 6 ${top + 30} L 6 ${bottom}`} fill="none" stroke={c} strokeWidth={8} /><path d={`M -3 ${top + 4} L 3 ${top + 4} L 3 ${top + 26} L 0 ${top + 30} L -3 ${top + 26} Z`} fill="#22282c" stroke={K} strokeWidth={1.5} /></g>;
+    case "uniform":
+      return (
+        <g>
+          {base}
+          <path d={`M -9 ${top + 1} L 0 ${top + 10} L 9 ${top + 1} L 6 ${top + 12} L 0 ${top + 10} L -6 ${top + 12} Z`} fill={d} stroke={K} strokeWidth={2} />
+          <rect x={-sw + 1} y={top + 1} width={10} height={5} fill="#f5c518" stroke={K} strokeWidth={1.5} />
+          <rect x={sw - 11} y={top + 1} width={10} height={5} fill="#f5c518" stroke={K} strokeWidth={1.5} />
+          <path d={`M ${-sw + 10} ${top + 15} l 3 6 l 6 1 l -4 4 l 1 6 l -6 -3 l -6 3 l 1 -6 l -4 -4 l 6 -1 Z`} fill="#f5c518" stroke={K} strokeWidth={1.5} />
+          <rect x={4} y={top + 16} width={sw - 10} height={6} rx={1} fill="#f2efe6" stroke={K} strokeWidth={1.2} />
+          <rect x={-sw} y={bottom - 8} width={sw * 2} height={7} fill="#1b2023" stroke={K} strokeWidth={2} />
+          <rect x={-5} y={bottom - 9} width={10} height={9} fill="#c9a227" stroke={K} strokeWidth={1.5} />
+        </g>
+      );
     default: // blouse
       return <g>{base}<path d={`M -9 ${top + 1} Q 0 ${top + 14} 9 ${top + 1} Z`} fill={neck} stroke={K} strokeWidth={2} /><path d={`M -${sw - 6} ${top + h * 0.5} Q 0 ${top + h * 0.6} ${sw - 6} ${top + h * 0.5}`} fill="none" stroke={d} strokeWidth={2} /></g>;
   }
@@ -225,6 +238,7 @@ export function TeacherToon({ look: l, t = 0, seed = 0, silhouette = false }: { 
         {has("book") && <g transform={`translate(${sw - 2} ${shoulderY + torsoLen * 0.66}) rotate(-12)`}><rect x={-6} y={-12} width={22} height={28} rx={2} fill="#3a5bc7" stroke={K} strokeWidth={2.5} /><path d="M -2 -6 L 12 -6 M -2 -1 L 10 -1" stroke="#f5c518" strokeWidth={2} /></g>}
         {has("coffee") && <g transform={`translate(${sw + 3} ${shoulderY + torsoLen * 0.72})`}><rect x={-7} y={-14} width={14} height={16} rx={3} fill="#f2efe6" stroke={K} strokeWidth={2.5} /><path d="M 7 -10 q 6 0 6 5 q 0 5 -6 5" fill="none" stroke={K} strokeWidth={2.5} /><path d="M -2 -18 q 2 -4 0 -8 M 3 -18 q 2 -4 0 -8" fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth={2} /></g>}
         {has("clipboard") && <g transform={`translate(${-sw - 6} ${shoulderY + torsoLen * 0.6}) rotate(10)`}><rect x={-10} y={-14} width={20} height={26} rx={2} fill="#a8774a" stroke={K} strokeWidth={2.5} /><rect x={-7} y={-10} width={14} height={18} fill="#fff" /><path d="M -5 -6 L 5 -6 M -5 -2 L 5 -2 M -5 2 L 3 2" stroke={K} strokeWidth={1.4} /></g>}
+        {has("scanner") && <g transform={`translate(${sw + 4} ${shoulderY + torsoLen * 0.78}) rotate(-25)`}><rect x={-4} y={-30} width={9} height={34} rx={3} fill="#1b2023" stroke={K} strokeWidth={2.5} /><rect x={-6} y={-40} width={13} height={12} rx={4} fill="#3fa7d6" stroke={K} strokeWidth={2.5} /><circle cx={0.5} cy={-34} r={2.5} fill="#e23d4f" /></g>}
         {has("pointer") && <path d={`M ${sw + 3} ${shoulderY + torsoLen * 0.82} L ${sw + 26} ${shoulderY - 6}`} stroke="#6b4a2e" strokeWidth={3.5} strokeLinecap="round" />}
         {/* head */}
         <g transform={`translate(0 ${headY})`}>
@@ -235,6 +249,7 @@ export function TeacherToon({ look: l, t = 0, seed = 0, silhouette = false }: { 
           <path d="M -20 22 Q 0 34 20 22" fill="none" stroke={skin.d} strokeWidth={4} opacity={0.5} />
           <Face l={l} blink={blink} />
           <HairFront l={l} />
+          {has("guardCap") && <g><path d="M -30 -20 Q -30 -42 0 -42 Q 30 -42 30 -20 Z" fill="#22305a" stroke={K} strokeWidth={3.5} /><path d="M -32 -20 L 32 -20 L 26 -12 L -26 -12 Z" fill="#1b2023" stroke={K} strokeWidth={3} /><path d="M -6 -36 l 6 -4 l 6 4 l -2 6 l -8 0 Z" fill="#f5c518" stroke={K} strokeWidth={1.5} /></g>}
           {has("beretFR") && <g><ellipse cx={-4} cy={-30} rx={30} ry={10} fill="#22305a" stroke={K} strokeWidth={3.5} /><path d="M -2 -40 L 0 -46" stroke={K} strokeWidth={3} /></g>}
         </g>
       </g>

@@ -36,6 +36,8 @@ const en = {
   chat: "Chat", accuse: "Say something", sendChat: "Send", chatPh: "Write a short message…", pickPlayer: "Choose a player", pickRoom: "Choose a room",
   emotes: "Emotes", teacherBadge: "Teacher", teacherPlays: "Teacher plays too", teacherPlaysHelp: "Scan this with your phone to join as a player (or open it in a new window).", openWindow: "Open in new window",
   sabotageOpt: "Sabotage", ventsOpt: "Vents", chatOpt: "Meeting chat", quickOnly: "Quick phrases", freeText: "Free text", on: "On", off: "Off",
+  bathLocked: "Bathrooms OUT OF ORDER today — it's been bad-pooped!", booksHint: "Find the missing books around the academy first (look for the blue books).",
+  demoMode: "Demo mode", demoTitle: "Play with bots", demoHelp: "Five bots have joined the shift. They walk around, do missions, eliminate, report bodies and vote. Press Start, then switch to your phone view with the button at the top.", projector: "Projector", phone: "Phone",
   badges: "My badges", pointsGame: "Points this game", reasons: { mission: "Missions", vote: "Correct votes", report: "Bodies reported", fix: "Sabotage fixed", elimination: "Eliminations", survive: "Survived", win: "Victory" } as Record<string, string>,
   eliminatedBy: "You were eliminated by", deadBody: "Dead body reported!", emergency: "Emergency meeting!", mute: "Sound", votedFor: "voted for",
   moveHelp: "Drag anywhere to move · tap the buttons to act"
@@ -77,6 +79,8 @@ const es: typeof en = {
   chat: "Chat", accuse: "Di algo", sendChat: "Enviar", chatPh: "Escribe un mensaje corto…", pickPlayer: "Elige un jugador", pickRoom: "Elige una sala",
   emotes: "Emociones", teacherBadge: "Profe", teacherPlays: "El profe también juega", teacherPlaysHelp: "Escanéalo con tu móvil para jugar (o ábrelo en otra ventana).", openWindow: "Abrir en ventana nueva",
   sabotageOpt: "Sabotaje", ventsOpt: "Conductos", chatOpt: "Chat de reunión", quickOnly: "Frases rápidas", freeText: "Texto libre", on: "Sí", off: "No",
+  bathLocked: "Baños FUERA DE SERVICIO hoy: ¡it's been bad-pooped! 💩", booksHint: "Primero encuentra los libros perdidos por la academia (busca los libros azules).",
+  demoMode: "Modo demo", demoTitle: "Juega con bots", demoHelp: "Cinco bots se unieron al turno. Caminan, hacen misiones, eliminan, avisan cuerpos y votan. Pulsa Empezar y cambia a la vista del móvil con el botón de arriba.", projector: "Proyector", phone: "Móvil",
   badges: "Mis insignias", pointsGame: "Puntos de esta partida", reasons: { mission: "Misiones", vote: "Votos correctos", report: "Cuerpos avisados", fix: "Sabotajes arreglados", elimination: "Eliminaciones", survive: "Sobreviviste", win: "Victoria" } as Record<string, string>,
   eliminatedBy: "Te eliminó", deadBody: "¡Cuerpo encontrado!", emergency: "¡Reunión de emergencia!", mute: "Sonido", votedFor: "votó a",
   moveHelp: "Arrastra para moverte · toca los botones para actuar"

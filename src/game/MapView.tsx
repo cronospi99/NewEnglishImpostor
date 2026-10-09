@@ -1,5 +1,7 @@
 import { memo } from "react";
-import { ALARM_PANELS, BELL, FUSE, WORLD, doors, furniture, halls, rooms, stations, vents, type Furniture } from "./map";
+import { ALARM_PANELS, BATH_DOOR, BELL, FUSE, GUARD, SCANNER, WORLD, doors, furniture, glassWalls, halls, offices, rooms, stations, vents, type Furniture } from "./map";
+import { TeacherToon } from "../badges/TeacherToon";
+import { WATCHMAN } from "../badges/teachers";
 
 const K = "#0e1113";
 
@@ -112,6 +114,34 @@ function Piece({ f }: { f: Furniture }) {
       return <g>{box("#6b4a2e")}<text x={x + 30} y={y + 50} fontSize={30}>🖋️</text><text x={x + w - 70} y={y + 50} fontSize={30}>🏅</text></g>;
     case "frames":
       return <g>{box("#c9a227", 2)}{[0, 1, 2].map((i) => <rect key={i} x={x + 5} y={y + 14 + i * 70} width={w - 10} height={50} fill="#f2efe6" stroke={K} strokeWidth={2} />)}</g>;
+    case "salesdesk":
+      return <g>{box("#f2efe6", 4)}<rect x={x + 8} y={y + 6} width={30} height={20} rx={2} fill="#3fa7d6" stroke={K} strokeWidth={2} /><text x={x + w - 26} y={y + 27} textAnchor="middle" fontSize={16}>📈</text><circle cx={x + w / 2} cy={y + h + 16} r={12} fill="#4a5359" stroke={K} strokeWidth={3} /></g>;
+    case "stalls":
+      return <g>{[0, 1, 2].map((i) => (
+        <g key={i}><rect x={x} y={y + i * (h / 3)} width={w} height={h / 3 - 6} rx={3} fill="#9bc4d6" stroke={K} strokeWidth={4} /><circle cx={x + 12} cy={y + i * (h / 3) + h / 6} r={4} fill="#c9a227" stroke={K} strokeWidth={1.5} /><text x={x + w / 2 + 6} y={y + i * (h / 3) + h / 6 + 8} textAnchor="middle" fontSize={22}>🚽</text></g>
+      ))}</g>;
+    case "sinks":
+      return <g>{box("#f2efe6", 4)}{[0, 1, 2].map((i) => <g key={i}><ellipse cx={x + w / 2} cy={y + 40 + i * 90} rx={11} ry={16} fill="#9bc4d6" stroke={K} strokeWidth={2.5} /><text x={x + w / 2} y={y + 22 + i * 90} textAnchor="middle" fontSize={16}>🧼</text></g>)}</g>;
+    case "ac":
+      return (
+        <g>
+          {box("#e6e2d6", 6)}
+          {[0, 1, 2, 3, 4].map((i) => <path key={i} d={`M ${x + 10} ${y + 8 + i * 4} h ${w - 20}`} stroke="#9aa39c" strokeWidth={2} />)}
+          <text x={x + w - 14} y={y + 21} textAnchor="middle" fontSize={11} fontFamily="'Space Mono',monospace" fontWeight={700} fill="#e23d4f">ERR</text>
+          {[0, 1, 2].map((i) => (
+            <circle key={i} cx={x + 30 + i * 30} cy={y + h + 10} r={8} fill="#8b969c" opacity={0.7}>
+              <animate attributeName="cy" values={`${y + h + 4};${y + h + 60}`} dur={`${1.6 + i * 0.3}s`} repeatCount="indefinite" />
+              <animate attributeName="r" values="6;18" dur={`${1.6 + i * 0.3}s`} repeatCount="indefinite" />
+              <animate attributeName="opacity" values="0.7;0" dur={`${1.6 + i * 0.3}s`} repeatCount="indefinite" />
+            </circle>
+          ))}
+          <text x={x + w / 2} y={y + h + 34} textAnchor="middle" fontSize={14} fontFamily="'Archivo Black',sans-serif" fill="#e23d4f" stroke={K} strokeWidth={3} paintOrder="stroke">AC BROKEN
+            <animate attributeName="opacity" values="1;0.2;1" dur="1s" repeatCount="indefinite" />
+          </text>
+        </g>
+      );
+    case "npc":
+      return null;
     case "coffeetable":
       return <g>{box("#a8774a", 10)}<text x={x + w / 2} y={y + h / 2 + 12} textAnchor="middle" fontSize={30}>💬</text></g>;
     default:
@@ -142,6 +172,7 @@ export const MapStatic = memo(function MapStatic({ labels = true }: { labels?: b
       {halls.map((h, i) => <rect key={"wh" + i} x={h.x - 16} y={h.y - 16} width={h.w + 32} height={h.h + 32} rx={6} fill="#4a5359" stroke={K} strokeWidth={5} />)}
       {halls.map((h, i) => <rect key={"h" + i} x={h.x} y={h.y} width={h.w} height={h.h} fill="url(#f-hall)" />)}
       {rooms.map((r) => <rect key={"f" + r.id} x={r.r.x} y={r.r.y} width={r.r.w} height={r.r.h} fill={`url(#f-${r.floor})`} />)}
+      {offices.map((o) => <rect key={o.id} x={o.r.x} y={o.r.y} width={o.r.w} height={o.r.h} fill="url(#f-carpet)" opacity={0.85} />)}
       {doors.map((d, i) => (
         <g key={"d" + i}>
           <rect x={d.x} y={d.y} width={d.w} height={d.h} fill="url(#f-hall)" />
@@ -165,6 +196,20 @@ export const MapStatic = memo(function MapStatic({ labels = true }: { labels?: b
         </g>
       ))}
       {vents.map((v) => <VentArt key={v.id} x={v.x} y={v.y} />)}
+      {glassWalls.map((g, i) => <rect key={"gl" + i} x={g.x} y={g.y} width={g.w} height={g.h} fill="rgba(160,214,240,0.55)" stroke={K} strokeWidth={3} />)}
+      {offices.map((o) => (
+        <g key={"ol" + o.id} transform={`translate(${o.r.x + o.r.w / 2},${o.r.y + (o.r.y < 900 ? o.r.h - 14 : 22)})`}>
+          <rect x={-58} y={-13} width={116} height={22} rx={3} fill="#f5c518" stroke={K} strokeWidth={3} />
+          <text y={3} textAnchor="middle" fontSize={11} fontFamily="'Space Mono',monospace" fontWeight={700} fill={K}>{o.en.toUpperCase()}</text>
+        </g>
+      ))}
+      {/* scanner arch at the lobby's south door */}
+      <g>
+        <rect x={SCANNER.x - 8} y={SCANNER.y - 20} width={16} height={70} rx={3} fill="#8b969c" stroke={K} strokeWidth={3} />
+        <rect x={SCANNER.x + SCANNER.w - 8} y={SCANNER.y - 20} width={16} height={70} rx={3} fill="#8b969c" stroke={K} strokeWidth={3} />
+        <rect x={SCANNER.x - 8} y={SCANNER.y - 30} width={SCANNER.w + 16} height={14} rx={3} fill="#3b4349" stroke={K} strokeWidth={3} />
+        <text x={SCANNER.x + SCANNER.w / 2} y={SCANNER.y - 19} textAnchor="middle" fontSize={9} fontFamily="'Space Mono',monospace" fontWeight={700} fill="#7bbf5a">SECURITY SCAN</text>
+      </g>
       <g transform={`translate(${FUSE.x},${FUSE.y - 46})`}>
         <rect x={-34} y={-14} width={68} height={50} rx={4} fill="#4a5359" stroke={K} strokeWidth={4} />
         <rect x={-26} y={-6} width={52} height={10} fill="url(#hazard)" stroke={K} strokeWidth={2} />
@@ -189,3 +234,36 @@ export const MapStatic = memo(function MapStatic({ labels = true }: { labels?: b
     </g>
   );
 });
+
+/* the watchman NPC: idles, breathes and turns to look at whoever is nearby */
+export function Watchman({ t = 0, lookDir = 1, alert = false }: { t?: number; lookDir?: number; alert?: boolean }) {
+  return (
+    <g transform={`translate(${GUARD.x},${GUARD.y + 6}) scale(${lookDir < 0 ? -0.82 : 0.82} 0.82)`}>
+      <TeacherToon look={WATCHMAN} t={t} seed={3} />
+      {alert && <text x={0} y={-215} textAnchor="middle" fontSize={40} fontFamily="'Archivo Black',sans-serif" fill="#f5c518" stroke={K} strokeWidth={5} paintOrder="stroke" transform={lookDir < 0 ? "scale(-1 1)" : undefined}>!</text>}
+    </g>
+  );
+}
+
+/* scanner arch light + locked bathroom door, drawn on top of the static map */
+export function MapDynamic({ bathLocked, scanFlash = 0 }: { bathLocked?: boolean; scanFlash?: number }) {
+  return (
+    <g>
+      {scanFlash > 0 && <rect x={SCANNER.x} y={SCANNER.y - 16} width={SCANNER.w} height={60} fill={`rgba(123,191,90,${0.45 * scanFlash})`} />}
+      {bathLocked && (
+        <g>
+          <rect x={BATH_DOOR.x} y={BATH_DOOR.y + 20} width={BATH_DOOR.w} height={BATH_DOOR.h - 40} fill="#5a3d26" stroke={K} strokeWidth={4} />
+          <g transform={`translate(${BATH_DOOR.x + BATH_DOOR.w / 2},${BATH_DOOR.y + BATH_DOOR.h / 2})`}>
+            <rect x={-80} y={-12} width={160} height={24} fill="url(#hazard)" stroke={K} strokeWidth={3} transform="rotate(-14)" />
+            <rect x={-80} y={-12} width={160} height={24} fill="url(#hazard)" stroke={K} strokeWidth={3} transform="rotate(14)" />
+          </g>
+          <g transform={`translate(${BATH_DOOR.x + BATH_DOOR.w / 2},${BATH_DOOR.y - 34})`}>
+            <rect x={-150} y={-26} width={300} height={52} rx={5} fill="#f2efe6" stroke={K} strokeWidth={4} />
+            <text y={-5} textAnchor="middle" fontSize={15} fontFamily="'Archivo Black',sans-serif" fill="#e23d4f">🚫 OUT OF ORDER 💩</text>
+            <text y={15} textAnchor="middle" fontSize={13} fontFamily="'Space Mono',monospace" fontWeight={700} fill={K}>It's been bad-pooped!</text>
+          </g>
+        </g>
+      )}
+    </g>
+  );
+}

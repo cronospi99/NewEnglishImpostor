@@ -7,7 +7,7 @@ import { Header } from "../shared/Header";
 import { Fit } from "../shared/Fit";
 import { g } from "./i18n";
 import { LingoBadge, Lingo, useClock } from "./Character";
-import { MapDefs, MapStatic } from "./MapView";
+import { MapDefs, MapDynamic, MapStatic, Watchman } from "./MapView";
 import { ALARM_PANELS, FUSE, WORLD } from "./map";
 import { ChatFeed, MeetingSplash, SoundToggle } from "./ui";
 import { sfx, startSiren, stopSiren, unlockAudio } from "./sfx";
@@ -31,11 +31,12 @@ function restore(): { code: string; hostId: string; state: HostState } {
   return { code, hostId: "host-" + makeId(), state: E.createState(code) };
 }
 
-export function Host({ onExit }: { onExit: () => void }) {
-  const init = useRef(restore()).current;
+export function Host({ onExit, demo = false, onPhase }: { onExit: () => void; demo?: boolean; onPhase?: (phase: string) => void }) {
+  const init = useRef(demo ? { code: "DEMO", hostId: "host-demo", state: E.createState("DEMO") } : restore()).current;
   const [s, setS] = useState<HostState>(init.state);
   const ref = useRef(s);
   ref.current = s;
+  if (import.meta.env.DEV) (window as any).__host = ref;
   const pos = useRef<Record<string, Pos>>({});
   const relay = useRef<Relay | null>(null);
   const [net, setNet] = useState<NetStatus>("connecting");
@@ -126,6 +127,7 @@ export function Host({ onExit }: { onExit: () => void }) {
   }, [apply, broadcast]);
 
   useEffect(() => {
+    if (demo) return;
     try { sessionStorage.setItem(KEY, JSON.stringify({ code: init.code, hostId: init.hostId, state: s })); } catch { /* ignore */ }
   }, [s, init.code, init.hostId]);
 
@@ -139,16 +141,17 @@ export function Host({ onExit }: { onExit: () => void }) {
   useEffect(() => {
     if (s.phase === "meeting" && s.meeting && s.meeting.stage === "clues") {
       setSplash({ reason: s.meeting.reason, caller: s.meeting.caller, victim: s.meeting.victim });
-      if (s.meeting.reason === "report") sfx.report(); else sfx.meeting();
+      if (!demo) { if (s.meeting.reason === "report") sfx.report(); else sfx.meeting(); }
       const t = setTimeout(() => setSplash(null), 2600);
       return () => clearTimeout(t);
     }
-    if (s.phase === "eject") sfx.eject();
-    if (s.phase === "end") { if (s.winner === "crew") sfx.win(); else sfx.lose(); }
+    if (!demo && s.phase === "eject") sfx.eject();
+    if (!demo && s.phase === "end") { if (s.winner === "crew") sfx.win(); else sfx.lose(); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phaseKey]);
+  useEffect(() => { onPhase?.(s.phase); }, [s.phase, onPhase]);
   const alarmOn = s.phase === "play" && s.sabotage?.kind === "alarm";
-  useEffect(() => { if (alarmOn) { startSiren(); return () => stopSiren(); } }, [alarmOn]);
+  useEffect(() => { if (alarmOn && !demo) { startSiren(); return () => stopSiren(); } }, [alarmOn, demo]);
 
   const setSetting = <K extends keyof Settings>(k: K, v: Settings[K]) => apply((d) => { d.settings[k] = v; });
   const newRoom = () => { try { sessionStorage.removeItem(KEY); } catch { /* ignore */ } location.reload(); };
@@ -192,7 +195,8 @@ export function Host({ onExit }: { onExit: () => void }) {
                 : `💡 ${T.lightsOut} — ${T.lightsMsg}`}
             </div>
           )}
-          <HostMap players={s.players} pos={pos} bodies={teacherView ? s.bodies : []} show={teacherView} sabotage={s.sabotage?.kind} held={s.sabotage ? Object.keys(s.sabotage.holds).filter((k) => s.sabotage!.holds[k].length) : []} />
+          {s.bathLocked && <div className="tag" style={{ alignSelf: "flex-start", color: "#0e1113", background: "#f2efe6", fontSize: 13 }}>🚫💩 {T.bathLocked}</div>}
+          <HostMap players={s.players} pos={pos} bodies={teacherView ? s.bodies : []} show={teacherView} bathLocked={s.bathLocked} sabotage={s.sabotage?.kind} held={s.sabotage ? Object.keys(s.sabotage.holds).filter((k) => s.sabotage!.holds[k].length) : []} />
         </div>
       )}
 
@@ -200,6 +204,13 @@ export function Host({ onExit }: { onExit: () => void }) {
 
       {s.phase === "lobby" && (
         <div className="stack-sm pad-sm" style={{ flex: 1, display: "grid", gridTemplateColumns: "minmax(min(340px,100%),0.8fr) minmax(min(420px,100%),1.2fr)", gap: 36, padding: "30px 30px", alignItems: "start" }}>
+          {demo ? (
+            <div>
+              <div className="kicker" style={{ marginBottom: 14, background: "#9b6bd3" }}>🤖 {T.demoMode}</div>
+              <h1 className="h1" style={{ fontSize: "clamp(34px,4.4vw,58px)" }}>{T.demoTitle}</h1>
+              <p className="lead" style={{ fontSize: 18 }}>{T.demoHelp}</p>
+            </div>
+          ) : (
           <div>
             <div className="kicker" style={{ marginBottom: 14 }}>{T.academy}</div>
             <h1 className="h1" style={{ fontSize: "clamp(34px,4.4vw,58px)" }}>{T.scan}</h1>
@@ -214,6 +225,7 @@ export function Host({ onExit }: { onExit: () => void }) {
             </div>
             <p className="lead" style={{ marginTop: 16, fontSize: 16 }}>{T.hostHelp}</p>
           </div>
+          )}
 
           <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
             <div className="plate">
@@ -250,17 +262,17 @@ export function Host({ onExit }: { onExit: () => void }) {
               </div>
             </div>
 
-            <div className="plate" style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
+            {!demo && <div className="plate" style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
               {tqr && <img src={tqr} alt="Teacher QR" style={{ width: 120, height: 120, border: "3px solid #0e1113", borderRadius: 6, imageRendering: "pixelated" }} />}
               <div style={{ flex: 1, minWidth: 200 }}>
                 <div className="lbl lbl-y" style={{ marginBottom: 6 }}>🎓 {T.teacherPlays}</div>
                 <div style={{ fontSize: 14, color: "rgba(242,239,230,0.7)", marginBottom: 10 }}>{T.teacherPlaysHelp}</div>
                 <button type="button" className="btn btn-s btn-sm" onClick={() => window.open(teacherUrl, "_blank", "width=420,height=860")}>{T.openWindow}</button>
               </div>
-            </div>
+            </div>}
 
             <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
-              <button type="button" className="btn btn-y btn-big" disabled={!E.canStart(s)} onClick={() => { unlockAudio(); apply((d, n) => E.startGame(d, n)); }}>{T.start}</button>
+              <button type="button" className="btn btn-y btn-big" disabled={!E.canStart(s)} onClick={() => { unlockAudio(); apply((d, n) => { const o = E.startGame(d, n); if (import.meta.env.DEV && location.search.includes("bath=locked")) d.bathLocked = true; return o; }); }}>{T.start}</button>
               <SoundToggle T={T} />
               {!E.canStart(s) && <span className="lbl">{T.needThree}</span>}
             </div>
@@ -375,13 +387,15 @@ export function TaskBar({ label, done, total }: { label: string; done: number; t
 }
 
 /* projector map: floor plan scaled to fit; players only in teacher view */
-function HostMap({ players, pos, bodies, show, sabotage, held }: { players: HostState["players"]; pos: React.MutableRefObject<Record<string, Pos>>; bodies: HostState["bodies"]; show: boolean; sabotage?: string; held: string[] }) {
+function HostMap({ players, pos, bodies, show, sabotage, held, bathLocked }: { players: HostState["players"]; pos: React.MutableRefObject<Record<string, Pos>>; bodies: HostState["bodies"]; show: boolean; sabotage?: string; held: string[]; bathLocked?: boolean }) {
   const t = useClock(true, show ? 30 : 6);
   return (
     <div style={{ flex: 1, minHeight: 0, border: "4px solid #0e1113", borderRadius: 6, overflow: "hidden", background: "#141a1d", boxShadow: "0 6px 0 #0e1113" }}>
       <svg viewBox={`40 20 ${WORLD.w - 40} ${WORLD.h - 20}`} preserveAspectRatio="xMidYMid meet" style={{ width: "100%", height: "100%", display: "block" }}>
         <MapDefs />
         <MapStatic />
+        <MapDynamic bathLocked={bathLocked} />
+        <Watchman t={t} lookDir={Math.sin(t * 0.5) > 0 ? 1 : -1} />
         {bodies.map((b) => {
           const p = players.find((x) => x.id === b.id);
           return p ? <g key={b.id} transform={`translate(${b.x},${b.y})`}><Lingo look={p.look} dead /></g> : null;

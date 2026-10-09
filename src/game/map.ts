@@ -24,7 +24,7 @@ export interface Station {
   label: string;
 }
 
-export const WORLD = { w: 2420, h: 1900 };
+export const WORLD = { w: 2780, h: 1900 };
 
 export const rooms: Room[] = [
   { id: "kids", en: "Kids Classroom", es: "Aula Kids", about: "Where the youngest students learn with songs and games.", r: { x: 80, y: 60, w: 540, h: 440 }, floor: "rug", accent: "#7bbf5a" },
@@ -37,13 +37,32 @@ export const rooms: Room[] = [
   { id: "teachers", en: "Teachers' Room", es: "Sala de Profesores", about: "Teachers plan lessons and mark tests here.", r: { x: 80, y: 1420, w: 540, h: 420 }, floor: "tile", accent: "#4fb39a" },
   { id: "exam", en: "Exam Room", es: "Sala de Exámenes", about: "Silence please! Official exams take place here.", r: { x: 720, y: 1420, w: 520, h: 420 }, floor: "tile", accent: "#d9d4c4" },
   { id: "office", en: "Director's Office", es: "Dirección", about: "The director signs certificates and meets parents.", r: { x: 1340, y: 1420, w: 520, h: 420 }, floor: "carpet", accent: "#c9a227" },
-  { id: "speaking", en: "Speaking Corner", es: "Rincón de Conversación", about: "Sofas and plants: the place to practise conversation.", r: { x: 1960, y: 1420, w: 380, h: 420 }, floor: "rug", accent: "#e98fc0" }
+  { id: "speaking", en: "Speaking Corner", es: "Rincón de Conversación", about: "Sofas and plants: the place to practise conversation.", r: { x: 1960, y: 1420, w: 380, h: 420 }, floor: "rug", accent: "#e98fc0" },
+  { id: "bath", en: "Bathrooms", es: "Baños", about: "Wash your hands! (When the bathrooms are open…)", r: { x: 2440, y: 740, w: 260, h: 440 }, floor: "tile", accent: "#3fa7d6" }
+];
+
+/* four glass-walled sales offices around the reception lobby */
+export interface Office { id: string; en: string; es: string; r: Rect }
+export const offices: Office[] = [
+  { id: "sales1", en: "Sales Office 1", es: "Oficina de Ventas 1", r: { x: 720, y: 740, w: 190, h: 150 } },
+  { id: "sales2", en: "Sales Office 2", es: "Oficina de Ventas 2", r: { x: 1510, y: 740, w: 190, h: 150 } },
+  { id: "sales3", en: "Sales Office 3", es: "Oficina de Ventas 3", r: { x: 720, y: 1030, w: 190, h: 150 } },
+  { id: "sales4", en: "Sales Office 4", es: "Oficina de Ventas 4", r: { x: 1510, y: 1030, w: 190, h: 150 } }
+];
+/* glass walls between the offices and the lobby (doors are the gaps) */
+export const glassWalls: Rect[] = [
+  { x: 910, y: 740, w: 16, h: 50 }, { x: 910, y: 870, w: 16, h: 36 }, { x: 720, y: 890, w: 206, h: 16 },
+  { x: 1494, y: 740, w: 16, h: 50 }, { x: 1494, y: 870, w: 16, h: 36 }, { x: 1494, y: 890, w: 206, h: 16 },
+  { x: 910, y: 1014, w: 16, h: 46 }, { x: 910, y: 1140, w: 16, h: 40 }, { x: 720, y: 1014, w: 206, h: 16 },
+  { x: 1494, y: 1014, w: 16, h: 46 }, { x: 1494, y: 1140, w: 16, h: 40 }, { x: 1494, y: 1014, w: 206, h: 16 }
 ];
 
 export const halls: Rect[] = [
-  { x: 80, y: 560, w: 2260, h: 120 },
-  { x: 80, y: 1240, w: 2260, h: 120 }
+  { x: 80, y: 560, w: 2620, h: 120 },
+  { x: 80, y: 1240, w: 2620, h: 120 }
 ];
+
+export const BATH_DOOR: Rect & { v: boolean } = { x: 2510, y: 650, w: 120, h: 120, v: true };
 
 /* doors: v = vertical passage (connects top/bottom), h = horizontal passage */
 export const doors: (Rect & { v: boolean })[] = [
@@ -54,8 +73,8 @@ export const doors: (Rect & { v: boolean })[] = [
   { x: 2090, y: 470, w: 120, h: 120, v: true },
   // middle rooms ↔ halls
   { x: 290, y: 650, w: 120, h: 120, v: true },
-  { x: 900, y: 650, w: 140, h: 120, v: true },
-  { x: 1400, y: 650, w: 140, h: 120, v: true },
+  { x: 960, y: 650, w: 130, h: 120, v: true },
+  { x: 1340, y: 650, w: 130, h: 120, v: true },
   { x: 2010, y: 650, w: 120, h: 120, v: true },
   { x: 290, y: 1150, w: 120, h: 120, v: true },
   { x: 1150, y: 1150, w: 140, h: 120, v: true },
@@ -67,7 +86,8 @@ export const doors: (Rect & { v: boolean })[] = [
   { x: 2090, y: 1330, w: 120, h: 120, v: true },
   // reception side doors
   { x: 590, y: 900, w: 160, h: 120, v: false },
-  { x: 1670, y: 900, w: 160, h: 120, v: false }
+  { x: 1670, y: 900, w: 160, h: 120, v: false },
+  BATH_DOOR
 ];
 
 /* furniture players walk around: [rect, kind] */
@@ -90,10 +110,17 @@ export const furniture: Furniture[] = [
   { x: 100, y: 770, w: 300, h: 50, kind: "counter" },
   { x: 160, y: 920, w: 90, h: 90, kind: "cafetable" }, { x: 380, y: 920, w: 90, h: 90, kind: "cafetable" }, { x: 270, y: 1060, w: 90, h: 90, kind: "cafetable" },
   // reception
-  { x: 760, y: 770, w: 360, h: 60, kind: "frontdesk" },
+  { x: 960, y: 770, w: 300, h: 56, kind: "frontdesk" },
   { x: 1110, y: 900, w: 140, h: 140, kind: "bell" },
-  { x: 1450, y: 780, w: 220, h: 50, kind: "sofa" },
-  { x: 1500, y: 1080, w: 160, h: 60, kind: "plants" },
+  // sales offices
+  { x: 736, y: 758, w: 100, h: 40, kind: "salesdesk", label: "1" }, { x: 1590, y: 758, w: 100, h: 40, kind: "salesdesk", label: "2" },
+  { x: 736, y: 1126, w: 100, h: 40, kind: "salesdesk", label: "3" }, { x: 1590, y: 1126, w: 100, h: 40, kind: "salesdesk", label: "4" },
+  // bathrooms
+  { x: 2620, y: 760, w: 70, h: 400, kind: "stalls" }, { x: 2452, y: 820, w: 34, h: 260, kind: "sinks" },
+  // AC unit on the adults' classroom wall
+  { x: 2190, y: 744, w: 130, h: 30, kind: "ac" },
+  // the watchman's post in the south hallway
+  { x: 1318, y: 1262, w: 44, h: 40, kind: "npc" },
   // adults
   { x: 1840, y: 770, w: 300, h: 26, kind: "board", label: "Phrasal verbs" },
   { x: 1900, y: 880, w: 380, h: 70, kind: "meeting" }, { x: 1900, y: 1040, w: 380, h: 70, kind: "meeting" },
@@ -119,7 +146,11 @@ export const stations: Station[] = [
   { id: "s-lab", room: "lab", x: 1600, y: 400, mission: "listen", label: "Listening booth" },
   { id: "s-teens", room: "teens", x: 2250, y: 360, mission: "unscramble", label: "Sentence builder" },
   { id: "s-cafe", room: "cafe", x: 470, y: 800, mission: "order", label: "Take the order" },
-  { id: "s-reception", room: "reception", x: 940, y: 880, mission: "phone", label: "Answer the phone" },
+  { id: "s-reception", room: "reception", x: 1320, y: 800, mission: "phone", label: "Answer the phone" },
+  { id: "s-ac", room: "adults", x: 2250, y: 830, mission: "ac", label: "Fix the AC" },
+  { id: "s-books", room: "library", x: 1130, y: 200, mission: "books", label: "Find the missing books" },
+  { id: "s-guard", room: "reception", x: 1300, y: 1305, mission: "security", label: "Security check" },
+  { id: "s-bath", room: "bath", x: 2540, y: 1000, mission: "sign", label: "Fix the bathroom sign" },
   { id: "s-adults", room: "adults", x: 2080, y: 1150 - 30, mission: "grammar", label: "Fix the email" },
   { id: "s-teachers", room: "teachers", x: 370, y: 1740, mission: "spot", label: "Mark the test" },
   { id: "s-exam", room: "exam", x: 1180, y: 1460, mission: "gap", label: "Exam paper" },
@@ -210,8 +241,26 @@ export function spawnPoint(i: number, n: number) {
 const inside = (x: number, y: number, r: Rect, mx: number, my: number) =>
   x >= r.x + mx && x <= r.x + r.w - mx && y >= r.y + my && y <= r.y + r.h - my;
 
+/* doors that are locked this game (e.g. the bathrooms) */
+let blocked: Rect[] = [];
+export function setBlocked(r: Rect[]) { blocked = r; }
+
+/* the watchman and his scanner arch */
+export const GUARD = { x: 1340, y: 1300 };
+export const SCANNER: Rect = { x: 1150, y: 1186, w: 140, h: 34 };
+
+/* spots where the missing student books can be hidden */
+export const BOOK_SPOTS = [
+  { x: 815, y: 845 }, { x: 1605, y: 845 }, { x: 815, y: 1080 }, { x: 1605, y: 1080 },
+  { x: 560, y: 120 }, { x: 160, y: 1130 }, { x: 1440, y: 1790 }, { x: 2600, y: 1300 },
+  { x: 160, y: 620 }, { x: 1810, y: 620 }, { x: 1010, y: 1790 }, { x: 2210, y: 1680 },
+  { x: 2300, y: 430 }, { x: 1800, y: 430 }, { x: 560, y: 1500 }
+];
+
 export function walkable(x: number, y: number): boolean {
   const m = RADIUS;
+  if (blocked.some((b) => x > b.x - 4 && x < b.x + b.w + 4 && y > b.y - 4 && y < b.y + b.h + 4)) return false;
+  if (glassWalls.some((w) => x > w.x - 14 && x < w.x + w.w + 14 && y > w.y - 14 && y < w.y + w.h + 16)) return false;
   const onFloor =
     rooms.some((rm) => inside(x, y, rm.r, m, m)) ||
     halls.some((h) => inside(x, y, h, m, m)) ||
@@ -229,6 +278,8 @@ export function moveWithin(x: number, y: number, dx: number, dy: number) {
 }
 
 export function roomAt(x: number, y: number): Room | null {
+  const o = offices.find((of) => inside(x, y, of.r, 0, 0));
+  if (o) return { id: o.id, en: o.en, es: o.es, about: "", r: o.r, floor: "carpet", accent: "#f5c518" };
   return rooms.find((rm) => inside(x, y, rm.r, 0, 0)) || null;
 }
 
