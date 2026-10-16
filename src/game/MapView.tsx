@@ -163,6 +163,9 @@ export function VentArt({ x, y, open = 0 }: { x: number; y: number; open?: numbe
 }
 
 /* static floor plan — rendered once */
+const receptionRect = rooms.find((r) => r.id === "reception")!.r;
+const RECEPTION_MID = receptionRect.y + receptionRect.h / 2;
+
 export const MapStatic = memo(function MapStatic({ labels = true }: { labels?: boolean }) {
   return (
     <g>
@@ -198,7 +201,7 @@ export const MapStatic = memo(function MapStatic({ labels = true }: { labels?: b
       {vents.map((v) => <VentArt key={v.id} x={v.x} y={v.y} />)}
       {glassWalls.map((g, i) => <rect key={"gl" + i} x={g.x} y={g.y} width={g.w} height={g.h} fill="rgba(160,214,240,0.55)" stroke={K} strokeWidth={3} />)}
       {offices.map((o) => (
-        <g key={"ol" + o.id} transform={`translate(${o.r.x + o.r.w / 2},${o.r.y + (o.r.y < 900 ? o.r.h - 14 : 22)})`}>
+        <g key={"ol" + o.id} transform={`translate(${o.r.x + o.r.w / 2},${o.r.y + (o.r.y < RECEPTION_MID ? o.r.h - 14 : 22)})`}>
           <rect x={-58} y={-13} width={116} height={22} rx={3} fill="#f5c518" stroke={K} strokeWidth={3} />
           <text y={3} textAnchor="middle" fontSize={11} fontFamily="'Space Mono',monospace" fontWeight={700} fill={K}>{o.en.toUpperCase()}</text>
         </g>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Relay, makeId, type NetStatus } from "./net";
 import type { EmoteMsg, FromHost, Look, PosMsg, PublicState, Secret, ToHost, VentFx } from "./types";
 import { g, type GStrings } from "./i18n";
@@ -6,7 +6,7 @@ import { COLORS, EXTRAS, FACES, HATS, LABELS, Lingo, LingoBadge, randomLook } fr
 import { MapDefs, MapDynamic, MapStatic, VentArt, Watchman } from "./MapView";
 import {
   ALARM_PANELS, BATH_DOOR, BELL, BOOK_SPOTS, FUSE, GUARD, RANGE, SCANNER, SPEED, VISION, WORLD, dist, ghostMove, lineOfSight, moveWithin, roomAt, rooms,
-  setBlocked, sightPolygon, spawnPoint, stations, vents, type Station
+  setBlocked, sightPoints, spawnPoint, stations, vents, type Station
 } from "./map";
 import { MissionPanel } from "./MissionPanel";
 import { Center, Countdown, EjectScene, EndScreen, MeetingBoard, TaskBar } from "./Host";
@@ -300,6 +300,12 @@ function RoleCard({ T, secret, pub, me }: { T: GStrings; secret: Secret | null; 
           <div style={{ fontSize: 64, lineHeight: 1, animation: "bob 1.4s ease-in-out infinite" }}>{imp ? "📱" : "📚"}</div>
           <div style={{ font: "400 clamp(28px,8vw,40px) 'Archivo Black',sans-serif", lineHeight: 1.05, textTransform: "uppercase", color: imp ? "#f07a1a" : "#7bbf5a", textShadow: "3px 3px 0 #0e1113" }}>{imp ? T.impostor : T.crew}</div>
           <div style={{ fontSize: 16, color: "rgba(242,239,230,0.8)" }}>{imp ? T.impGoal : T.crewGoal}</div>
+          <div className="well" style={{ padding: "8px 12px", textAlign: "left", width: "100%" }}>
+            <div className="lbl" style={{ marginBottom: 4 }}>🎯 {imp ? T.fakeMissions : T.yourMissions}: {secret.tasks.length} {T.ofOnMap.replace("{n}", String(stations.length))}</div>
+            <div style={{ fontSize: 13, lineHeight: 1.5 }}>
+              {secret.tasks.map((sid) => { const st = stations.find((x) => x.id === sid); const r = st && rooms.find((x) => x.id === st.room); return st && r ? <div key={sid}><span style={{ color: r.accent }}>■</span> {r.en}: {st.label}</div> : null; })}
+            </div>
+          </div>
           {partners.length > 0 && <div style={{ fontSize: 15 }}>{T.partner}: <b>{partners.map((p) => p.name).join(", ")}</b></div>}
         </div>
       </div>
@@ -399,6 +405,16 @@ function MeetingPhone({ T, lang, me, pub, secret, send }: { T: GStrings; lang: L
 
 /* ---------------- the game world on the phone ---------------- */
 
+const layerSvg: React.CSSProperties = { position: "absolute", inset: 0, width: "100%", height: "100%", overflow: "visible" };
+const StaticWorld = memo(function StaticWorld() {
+  return (
+    <svg viewBox={`0 0 ${WORLD.w} ${WORLD.h}`} style={layerSvg}>
+      <MapDefs />
+      <MapStatic />
+    </svg>
+  );
+});
+
 function PlayView({ T, lang, me, pub, secret, relay, others, mine, send, alive, emotes, ventFx, shake }: {
   T: GStrings; lang: Lang; me: string; pub: PublicState & { at: number }; secret: (Secret & { at: number }) | null;
   relay: React.MutableRefObject<Relay | null>; others: React.MutableRefObject<Record<string, Other>>;
@@ -420,6 +436,11 @@ function PlayView({ T, lang, me, pub, secret, relay, others, mine, send, alive, 
   const scanAt = useRef(0);
   const inScanner = useRef(false);
   const [size, setSize] = useState({ w: window.innerWidth, h: window.innerHeight });
+  /* lite mode kicks in automatically on slow devices: fewer rays, no dust, coarser fog */
+  const [lite, setLite] = useState(false);
+  const liteRef = useRef(false);
+  const fogRef = useRef<HTMLCanvasElement>(null);
+  const [roomFlash, setRoomFlash] = useState<{ en: string; es: string; accent: string } | null>(null);
   const joy = useRef<{ ox: number; oy: number; x: number; y: number; id: number } | null>(null);
   const keys = useRef<Record<string, boolean>>({});
   const panelRef = useRef(false);
@@ -448,10 +469,13 @@ function PlayView({ T, lang, me, pub, secret, relay, others, mine, send, alive, 
   }, [mine, relay]);
 
   useEffect(() => {
-    let raf = 0, last = performance.now(), lastSend = 0, wasMoving = false;
+    let raf = 0, last = performance.now(), lastSend = 0, wasMoving = false, lastRender = 0, ema = 1 / 60;
+    const started = performance.now();
     const loop = (t: number) => {
       const dt = Math.min(0.05, (t - last) / 1000);
       last = t;
+      ema = ema * 0.96 + dt * 0.04;
+      if (!liteRef.current && t - started > 4000 && ema > 0.03) { liteRef.current = true; setLite(true); }
       tRef.current = t / 1000;
       let vx = 0, vy = 0;
       if (!panelRef.current) {
@@ -485,11 +509,15 @@ function PlayView({ T, lang, me, pub, secret, relay, others, mine, send, alive, 
         lastDust.current[key] = t;
         dust.current.push({ x: x + (Math.random() - 0.5) * 16, y: y - 2, at: t, r: 5 + Math.random() * 4 });
       };
-      if (p.m && !ghostRef.current) addDust("me", p.x, p.y);
-      Object.entries(others.current).forEach(([oid, o]) => { if (o.m && !o.v) addDust(oid, o.dx, o.dy); });
+      if (!liteRef.current) {
+        if (p.m && !ghostRef.current) addDust("me", p.x, p.y);
+        Object.entries(others.current).forEach(([oid, o]) => { if (o.m && !o.v) addDust(oid, o.dx, o.dy); });
+      }
       dust.current = dust.current.filter((d) => t - d.at < 520);
       ventFx.current = ventFx.current.filter((v) => t - v.at < 700);
-      setFrame((x) => (x + 1) % 1000000);
+      /* draw at most ~60 times a second (even on 120 Hz screens), ~30 when nothing is moving */
+      const busy = p.m || dust.current.length > 0 || ventFx.current.length > 0 || Object.values(others.current).some((o) => o.m || Math.abs(o.x - o.dx) + Math.abs(o.y - o.dy) > 1);
+      if (t - lastRender >= (busy ? 15 : 32)) { lastRender = t; setFrame((x) => (x + 1) % 1000000); }
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
@@ -502,13 +530,21 @@ function PlayView({ T, lang, me, pub, secret, relay, others, mine, send, alive, 
   const lights = pub.sabotage?.kind === "lights";
   const alarm = pub.sabotage?.kind === "alarm";
   const vision = imp ? VISION.impostor : VISION.crew * (lights ? VISION.lightsOut : 1);
+  const shakeAge = (performance.now() - shake.current) / 1000;
+  const sh = shakeAge < 0.35 ? Math.sin(shakeAge * 90) * 10 * (1 - shakeAge / 0.35) : 0;
   const portrait = size.h >= size.w;
-  const vw = portrait ? 760 : Math.min(1500, 700 * (size.w / size.h));
-  const vh = portrait ? Math.min(1500, 760 * (size.h / size.w)) : 700;
+  const vw = portrait ? 860 : Math.min(1700, 800 * (size.w / size.h));
+  const vh = portrait ? Math.min(1700, 860 * (size.h / size.w)) : 800;
+  /* css px per world unit; the camera is a translate on GPU layers, so the map is never redrawn while moving */
+  const scale = Math.max(size.w / vw, size.h / vh);
+  const dpr = window.devicePixelRatio || 1;
+  const tx = Math.round((size.w / 2 - (p.x + sh) * scale) * dpr) / dpr;
+  const ty = Math.round((size.h / 2 - (p.y - 40) * scale) * dpr) / dpr;
   const nowMs = Date.now();
   const tNow = tRef.current;
   const eye = { x: p.x, y: p.y - 30 };
-  const sight = ghost ? "" : sightPolygon(eye.x, eye.y, vision);
+  const ex = Math.round(eye.x), ey = Math.round(eye.y);
+  const sight = useMemo(() => (ghost ? null : sightPoints(ex, ey, vision, lite ? 96 : 150)), [ex, ey, vision, ghost, lite]);
   const canSee = (q: { x: number; y: number }) => ghost || (dist(eye, q) < vision + 30 && lineOfSight(eye, { x: q.x, y: q.y - 30 }));
 
   const doneSet = new Set([...(secret?.done || []), ...done]);
@@ -555,8 +591,6 @@ function PlayView({ T, lang, me, pub, secret, relay, others, mine, send, alive, 
   const room = roomAt(p.x, p.y);
   const lk = pub.lastKill;
   const killFxAge = lk ? (nowMs - (pub.at - lk.ago)) / 1000 : 99;
-  const shakeAge = (performance.now() - shake.current) / 1000;
-  const sh = shakeAge < 0.35 ? Math.sin(shakeAge * 90) * 10 * (1 - shakeAge / 0.35) : 0;
 
   useEffect(() => {
     setBlocked(pub.bathLocked ? [BATH_DOOR] : []);
@@ -586,6 +620,66 @@ function PlayView({ T, lang, me, pub, secret, relay, others, mine, send, alive, 
   useEffect(() => {
     if (holding && (!nearPanel || nearPanel.id !== holding)) { send({ k: "hold", panel: holding, on: false }); setHolding(null); }
   }, [holding, nearPanel, send]);
+
+  /* fog of war, Among Us style: outside your sight the academy is dimmed (still readable), people are hidden */
+  const fogQ = lite ? 0.25 : 0.4;
+  useLayoutEffect(() => {
+    const c = fogRef.current;
+    if (!c) return;
+    const W = Math.max(1, Math.round(size.w * fogQ)), H = Math.max(1, Math.round(size.h * fogQ));
+    if (c.width !== W) c.width = W;
+    if (c.height !== H) c.height = H;
+    const ctx = c.getContext("2d");
+    if (!ctx) return;
+    ctx.globalCompositeOperation = "source-over";
+    ctx.clearRect(0, 0, W, H);
+    if (!sight) return;
+    ctx.fillStyle = lights ? "rgba(3,5,8,0.9)" : "rgba(8,11,14,0.6)";
+    ctx.fillRect(0, 0, W, H);
+    const k = scale * fogQ, ox = tx * fogQ, oy = ty * fogQ;
+    const cx = ox + eye.x * k, cy = oy + eye.y * k, R = vision * k;
+    const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, R);
+    grad.addColorStop(0, "rgba(0,0,0,1)");
+    grad.addColorStop(0.7, "rgba(0,0,0,1)");
+    grad.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.globalCompositeOperation = "destination-out";
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    for (let i = 0; i < sight.length; i += 2) {
+      const x = ox + sight[i] * k, y = oy + sight[i + 1] * k;
+      if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.globalCompositeOperation = "source-over";
+  });
+  /* big room name when you walk into a new room */
+  const roomId = room?.id;
+  useEffect(() => {
+    if (!room) return;
+    setRoomFlash({ en: room.en, es: room.es, accent: room.accent });
+    const t = setTimeout(() => setRoomFlash(null), 1800);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomId]);
+
+  /* arrows on the screen edge pointing at things you need to reach */
+  const targets: { x: number; y: number; c: string; k: string }[] = [
+    ...todo.filter((st) => !(st.id === "s-books" && booksNeed)).map((st) => ({ x: st.x, y: st.y, c: "#f5c518", k: st.id })),
+    ...booksLeft.map((b, i) => ({ x: b.x, y: b.y, c: "#3fa7d6", k: "b" + i })),
+    ...(lights && !ghost ? [{ x: FUSE.x, y: FUSE.y, c: "#e23d4f", k: "fuse" }] : []),
+    ...(alarm && !ghost ? ALARM_PANELS.filter((a) => !pub.sabotage!.held.includes(a.id)).map((a) => ({ x: a.x, y: a.y, c: "#e23d4f", k: "al" + a.id })) : [])
+  ];
+  const arrows = targets.flatMap((tg) => {
+    const sx = tx + tg.x * scale, sy = ty + (tg.y - 20) * scale;
+    const mL = 26, mR = 26, mT = 96, mB = 150;
+    if (sx > mL && sx < size.w - mR && sy > mT && sy < size.h - mB) return [];
+    const cx = size.w / 2, cy = size.h / 2, dx = sx - cx, dy = sy - cy;
+    const f = Math.min(dx > 0 ? (size.w - mR - cx) / dx : dx < 0 ? (mL - cx) / dx : Infinity, dy > 0 ? (size.h - mB - cy) / dy : dy < 0 ? (mT - cy) / dy : Infinity);
+    return [{ ...tg, x: cx + dx * f, y: cy + dy * f, a: Math.atan2(dy, dx) * 180 / Math.PI, d: Math.hypot(tg.x - p.x, tg.y - p.y) }];
+  });
+
+  const layerStyle: React.CSSProperties = { position: "absolute", left: 0, top: 0, width: WORLD.w * scale, height: WORLD.h * scale, transform: `translate3d(${tx}px,${ty}px,0)`, willChange: "transform", pointerEvents: "none" };
 
   const onDown = (e: React.PointerEvent) => {
     if ((e.target as HTMLElement).closest("button")) return;
@@ -648,28 +742,12 @@ function PlayView({ T, lang, me, pub, secret, relay, others, mine, send, alive, 
   return (
     <div style={{ position: "fixed", inset: 0, touchAction: "none", userSelect: "none", WebkitUserSelect: "none", overflow: "hidden", background: "#141a1d" }}
       onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
-      <svg viewBox={`${p.x - vw / 2 + sh} ${p.y - vh / 2 - 40} ${vw} ${vh}`} preserveAspectRatio="xMidYMid slice" style={{ width: "100%", height: "100%", display: "block" }}>
-        <MapDefs />
-        <defs>
-          <radialGradient id="fogGrad" gradientUnits="userSpaceOnUse" cx={eye.x} cy={eye.y} r={vision}>
-            <stop offset="0.7" stopColor="#000" />
-            <stop offset="1" stopColor="#fff" />
-          </radialGradient>
-          <mask id="fog" maskUnits="userSpaceOnUse" x={p.x - 3000} y={p.y - 3000} width={6000} height={6000}>
-            <rect x={p.x - 3000} y={p.y - 3000} width={6000} height={6000} fill="#fff" />
-            {sight && <polygon points={sight} fill="url(#fogGrad)" />}
-          </mask>
-        </defs>
-        <MapStatic />
-        <MapDynamic bathLocked={pub.bathLocked} scanFlash={scanFlash} />
-        {booksLeft.map((b, i) => (
-          <g key={"book" + i} transform={`translate(${b.x},${b.y - 10 + Math.sin(tNow * 3 + i) * 5})`}>
-            <ellipse cx={0} cy={22} rx={20} ry={5} fill="rgba(0,0,0,0.3)" />
-            <rect x={-16} y={-12} width={32} height={24} rx={3} fill="#3a5bc7" stroke="#0e1113" strokeWidth={3} transform="rotate(-10)" />
-            <path d="M -10 -4 L 10 -7 M -9 2 L 8 -1" stroke="#f5c518" strokeWidth={2.5} transform="rotate(-10)" />
-            <circle r={30 + Math.sin(tNow * 5) * 3} fill="none" stroke="#3fa7d6" strokeWidth={3} strokeDasharray="6 6" />
-          </g>
-        ))}
+      {/* layer 1: the academy itself — drawn once, then only slid around by the camera */}
+      <div style={layerStyle}><StaticWorld /></div>
+      {/* layer 2: people, bodies and effects */}
+      <div style={layerStyle}>
+        <svg viewBox={`0 0 ${WORLD.w} ${WORLD.h}`} style={layerSvg}>
+          <MapDynamic bathLocked={pub.bathLocked} scanFlash={scanFlash} />
         <Watchman t={tNow} lookDir={guardLook} alert={nearGuard && !ghost} />
         {nearGuard && !ghost && (
           <g transform={`translate(${GUARD.x + 40},${GUARD.y - 200})`}>
@@ -682,14 +760,6 @@ function PlayView({ T, lang, me, pub, secret, relay, others, mine, send, alive, 
           const a = (tNow * 1000 - v.at) / 1000;
           return <g key={"vf" + i}><VentArt x={v.x} y={v.y} open={Math.sin(Math.min(1, a / 0.6) * Math.PI)} /></g>;
         })}
-        {todo.map((s) => (
-          <g key={s.id} transform={`translate(${s.x},${s.y})`}>
-            <circle r={30 + Math.sin(tNow * 5) * 3} fill="none" stroke="#f5c518" strokeWidth={5} />
-            <text y={-36 + Math.sin(tNow * 4) * 4} textAnchor="middle" fontSize={34} fontFamily="'Archivo Black',sans-serif" fill="#f5c518" stroke="#0e1113" strokeWidth={5} paintOrder="stroke">!</text>
-          </g>
-        ))}
-        {lights && <circle cx={FUSE.x} cy={FUSE.y - 46} r={50 + Math.sin(tNow * 8) * 6} fill="none" stroke="#e23d4f" strokeWidth={6} />}
-        {alarm && ALARM_PANELS.map((a) => <circle key={a.id} cx={a.x} cy={a.y - 8} r={44 + Math.sin(tNow * 10) * 6} fill="none" stroke={pub.sabotage!.held.includes(a.id) ? "#7bbf5a" : "#e23d4f"} strokeWidth={6} />)}
         {dust.current.map((d, i) => {
           const a = (tNow * 1000 - d.at) / 520;
           return <circle key={"d" + i} cx={d.x} cy={d.y - a * 8} r={d.r + a * 8} fill="#d9d4c4" opacity={0.45 * (1 - a)} />;
@@ -708,8 +778,44 @@ function PlayView({ T, lang, me, pub, secret, relay, others, mine, send, alive, 
           ...(meP && !inVent ? [{ q: meP, x: p.x, y: p.y, dir: p.dir, m: p.m }] : [])]
           .sort((a, b) => a.y - b.y)
           .map(({ q, x, y, dir, m }) => drawChar(q, x, y, dir, m))}
-        {!ghost && <rect x={p.x - 3000} y={p.y - 3000} width={6000} height={6000} fill={lights ? "#05070a" : "#0b0e10"} opacity={0.93} mask="url(#fog)" />}
-      </svg>
+        </svg>
+      </div>
+      {/* layer 3: fog of war (low-res canvas = soft edges for free) */}
+      <canvas ref={fogRef} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }} />
+      {/* layer 4: things you are looking for stay visible through the fog */}
+      <div style={layerStyle}>
+        <svg viewBox={`0 0 ${WORLD.w} ${WORLD.h}`} style={layerSvg}>
+        {booksLeft.map((b, i) => (
+          <g key={"book" + i} transform={`translate(${b.x},${b.y - 10 + Math.sin(tNow * 3 + i) * 5})`}>
+            <ellipse cx={0} cy={22} rx={20} ry={5} fill="rgba(0,0,0,0.3)" />
+            <rect x={-16} y={-12} width={32} height={24} rx={3} fill="#3a5bc7" stroke="#0e1113" strokeWidth={3} transform="rotate(-10)" />
+            <path d="M -10 -4 L 10 -7 M -9 2 L 8 -1" stroke="#f5c518" strokeWidth={2.5} transform="rotate(-10)" />
+            <circle r={30 + Math.sin(tNow * 5) * 3} fill="none" stroke="#3fa7d6" strokeWidth={3} strokeDasharray="6 6" />
+          </g>
+        ))}
+        {todo.map((s) => (
+          <g key={s.id} transform={`translate(${s.x},${s.y})`}>
+            <circle r={30 + Math.sin(tNow * 5) * 3} fill="none" stroke="#f5c518" strokeWidth={5} />
+            <text y={-36 + Math.sin(tNow * 4) * 4} textAnchor="middle" fontSize={34} fontFamily="'Archivo Black',sans-serif" fill="#f5c518" stroke="#0e1113" strokeWidth={5} paintOrder="stroke">!</text>
+          </g>
+        ))}
+        {lights && <circle cx={FUSE.x} cy={FUSE.y - 46} r={50 + Math.sin(tNow * 8) * 6} fill="none" stroke="#e23d4f" strokeWidth={6} />}
+        {alarm && ALARM_PANELS.map((a) => <circle key={a.id} cx={a.x} cy={a.y - 8} r={44 + Math.sin(tNow * 10) * 6} fill="none" stroke={pub.sabotage!.held.includes(a.id) ? "#7bbf5a" : "#e23d4f"} strokeWidth={6} />)}
+        </svg>
+      </div>
+      {arrows.map((a) => (
+        <div key={"ar" + a.k} style={{ position: "absolute", left: a.x, top: a.y, transform: `translate(-50%,-50%) rotate(${a.a}deg)`, pointerEvents: "none" }}>
+          <svg width={34} height={34} viewBox="-17 -17 34 34" style={{ display: "block", overflow: "visible" }}>
+            <path d={`M ${10 + Math.sin(tNow * 6) * 3} 0 L -8 -11 L -3 0 L -8 11 Z`} fill={a.c} stroke="#0e1113" strokeWidth={3} strokeLinejoin="round" />
+          </svg>
+        </div>
+      ))}
+      {roomFlash && (
+        <div key={roomFlash.en} style={{ position: "absolute", left: 0, right: 0, bottom: "24%", textAlign: "center", pointerEvents: "none", animation: "roomFlash 1.8s ease-out both" }}>
+          <div style={{ font: "400 clamp(22px,6vw,40px) 'Archivo Black',sans-serif", textTransform: "uppercase", color: "#f2efe6", textShadow: `3px 3px 0 #0e1113, 0 0 18px ${roomFlash.accent}` }}>{roomFlash.en}</div>
+          <div style={{ font: "700 13px 'Space Mono',monospace", letterSpacing: "0.2em", textTransform: "uppercase", color: roomFlash.accent, textShadow: "2px 2px 0 #0e1113" }}>{roomFlash.es}</div>
+        </div>
+      )}
 
       {alarm && <div style={{ position: "absolute", inset: 0, pointerEvents: "none", boxShadow: `inset 0 0 ${60 + Math.sin(tNow * 8) * 30}px rgba(226,61,79,0.75)` }} />}
 
@@ -730,7 +836,7 @@ function PlayView({ T, lang, me, pub, secret, relay, others, mine, send, alive, 
           {alarm ? `🚨 ${Math.ceil((pub.sabotage!.msLeft - (nowMs - pub.at)) / 1000)}s — ${T.alarmMsg}` : `💡 ${T.lightsMsg}`}
         </div>
       )}
-      <div style={{ position: "absolute", top: (lights || alarm) ? 122 : 62, left: 8, maxWidth: "62vw" }}>
+      <div style={{ position: "absolute", top: (lights || alarm || bathBanner || nearBathDoor || hint) ? 128 : 62, left: 8, maxWidth: "62vw" }}>
         <button type="button" className="tag" onClick={() => setShowList((v) => !v)} style={{ color: imp ? "#ff5a5a" : "#f5c518", cursor: "pointer" }}>
           {imp ? "📱 " + T.impostor : "📚 " + T.crew} {showList ? "▾" : "▸"}
         </button>
@@ -810,7 +916,7 @@ function PlayView({ T, lang, me, pub, secret, relay, others, mine, send, alive, 
       {nearPanel && !inVent && <div style={{ position: "absolute", left: 0, right: 0, bottom: 128, textAlign: "center", pointerEvents: "none" }}><span className="tag" style={{ color: "#fff3e0", background: "#b4441f" }}>{T.holdHelp}</span></div>}
 {!inVent && <div style={{ position: "absolute", left: 0, right: 0, bottom: 70, textAlign: "center", pointerEvents: "none", font: "700 10px 'Space Mono',monospace", color: "rgba(242,239,230,0.35)" }}>{T.moveHelp}</div>}
 
-      {showMap && <MiniMap onClose={() => setShowMap(false)} me={p} todo={todo} T={T} sabotage={pub.sabotage?.kind} />}
+      {showMap && <MiniMap onClose={() => setShowMap(false)} me={p} todo={todo} doneList={myTasks.filter((x) => doneSet.has(x.id))} books={booksLeft} T={T} sabotage={pub.sabotage?.kind} room={room?.en} />}
       {fuse && <FusePanel T={T} onClose={() => setFuse(false)} onFixed={() => { send({ k: "fixLights" }); setFuse(false); }} />}
       {panel && (
         <MissionPanel station={panel} level={pub.settings.level} lang={lang} fake={imp}
@@ -866,20 +972,34 @@ function FusePanel({ T, onClose, onFixed }: { T: GStrings; onClose: () => void; 
   );
 }
 
-function MiniMap({ onClose, me, todo, T, sabotage }: { onClose: () => void; me: { x: number; y: number }; todo: Station[]; T: GStrings; sabotage?: string }) {
+function MiniMap({ onClose, me, todo, doneList, books, T, sabotage, room }: { onClose: () => void; me: { x: number; y: number }; todo: Station[]; doneList: Station[]; books: { x: number; y: number }[]; T: GStrings; sabotage?: string; room?: string }) {
+  const portrait = window.innerHeight > window.innerWidth * 1.15;
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 40, background: "rgba(14,17,19,0.9)", display: "flex", flexDirection: "column", padding: 10, gap: 8 }} onPointerDown={(e) => e.stopPropagation()}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <span className="lbl lbl-y">{T.map} — Smart Academia de Idiomas</span>
+    <div style={{ position: "fixed", inset: 0, zIndex: 60, background: "#0e1113", display: "flex", flexDirection: "column", padding: 10, gap: 8 }} onPointerDown={(e) => e.stopPropagation()}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+        <span className="lbl lbl-y">🗺 {T.map} — Smart Academia</span>
         <button type="button" className="sq btn-s" onClick={onClose}>✕</button>
       </div>
-      <svg viewBox={`40 20 ${WORLD.w - 40} ${WORLD.h - 20}`} preserveAspectRatio="xMidYMid meet" style={{ flex: 1, width: "100%", border: "3px solid #0e1113", borderRadius: 6 }}>
+      <span className="lbl" style={{ display: "flex", gap: "4px 14px", flexWrap: "wrap" }}>
+          <span><span style={{ color: "#f5c518" }}>●</span> {T.yourMissions}: {todo.length}</span>
+          <span><span style={{ color: "#7bbf5a" }}>✓</span> {doneList.length} {T.done}</span>
+          <span><span style={{ color: "#3fa7d6" }}>●</span> {T.youAreHere}{room ? `: ${room}` : ""}</span>
+      </span>
+      {/* portrait phones get the plan turned sideways so it is twice as big */}
+      <svg viewBox={portrait ? `20 40 ${WORLD.h - 30} ${WORLD.w - 60}` : `40 20 ${WORLD.w - 40} ${WORLD.h - 20}`} preserveAspectRatio="xMidYMid meet" style={{ flex: 1, minHeight: 0, width: "100%", border: "3px solid #3b4349", borderRadius: 6, background: "#141a1d" }}>
+        <g transform={portrait ? `translate(${WORLD.h} 0) rotate(90)` : undefined}>
         <MapDefs />
         <MapStatic />
-        {todo.map((s) => <circle key={s.id} cx={s.x} cy={s.y} r={34} fill="#f5c518" stroke="#0e1113" strokeWidth={6} style={{ animation: "blink 1s infinite" }} />)}
+        {stations.map((s) => <circle key={"all" + s.id} cx={s.x} cy={s.y} r={14} fill="rgba(242,239,230,0.35)" stroke="#0e1113" strokeWidth={4} />)}
+        {doneList.map((s) => <text key={"ok" + s.id} x={s.x} y={s.y + 18} textAnchor="middle" fontSize={56} fontWeight={900} fill="#7bbf5a" stroke="#0e1113" strokeWidth={6} paintOrder="stroke">✓</text>)}
+        {todo.map((s) => <circle key={s.id} cx={s.x} cy={s.y} r={38} fill="#f5c518" stroke="#0e1113" strokeWidth={6} style={{ animation: "blink 1s infinite" }} />)}
+        {books.map((b, i) => <rect key={"bk" + i} x={b.x - 22} y={b.y - 16} width={44} height={32} rx={4} fill="#3a5bc7" stroke="#fff" strokeWidth={5} />)}
         {sabotage === "lights" && <circle cx={FUSE.x} cy={FUSE.y - 40} r={46} fill="#e23d4f" stroke="#fff" strokeWidth={6} style={{ animation: "blink .6s infinite" }} />}
         {sabotage === "alarm" && ALARM_PANELS.map((a) => <circle key={a.id} cx={a.x} cy={a.y} r={46} fill="#e23d4f" stroke="#fff" strokeWidth={6} style={{ animation: "blink .6s infinite" }} />)}
+        <circle cx={me.x} cy={me.y - 30} r={70} fill="none" stroke="#3fa7d6" strokeWidth={8} opacity={0.6} style={{ transformOrigin: `${me.x}px ${me.y - 30}px`, animation: "blink 1.2s infinite" }} />
         <circle cx={me.x} cy={me.y - 30} r={40} fill="#3fa7d6" stroke="#fff" strokeWidth={8} />
+        <text x={me.x} y={me.y - 92} textAnchor="middle" fontSize={44} fontWeight={900} fill="#fff" stroke="#0e1113" strokeWidth={8} paintOrder="stroke">{T.youAreHere}</text>
+        </g>
       </svg>
     </div>
   );

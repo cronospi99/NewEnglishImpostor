@@ -8,7 +8,7 @@ import { Fit } from "../shared/Fit";
 import { g } from "./i18n";
 import { LingoBadge, Lingo, useClock } from "./Character";
 import { MapDefs, MapDynamic, MapStatic, Watchman } from "./MapView";
-import { ALARM_PANELS, FUSE, WORLD } from "./map";
+import { ALARM_PANELS, FUSE, WORLD, rooms, stations } from "./map";
 import { ChatFeed, MeetingSplash, SoundToggle } from "./ui";
 import { sfx, startSiren, stopSiren, unlockAudio } from "./sfx";
 import { Hatch } from "../classic/ClassicGame";
@@ -260,6 +260,8 @@ export function Host({ onExit, demo = false, onPhase }: { onExit: () => void; de
               </div>
             </div>
 
+            <MissionsPlate s={s} T={T} />
+
             {!demo && <div className="plate" style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
               {tqr && <img src={tqr} alt="Teacher QR" style={{ width: 120, height: 120, border: "3px solid #0e1113", borderRadius: 6, imageRendering: "pixelated" }} />}
               <div style={{ flex: 1, minWidth: 200 }}>
@@ -282,6 +284,7 @@ export function Host({ onExit, demo = false, onPhase }: { onExit: () => void; de
         <Center>
           <div className="kicker">{s.round}</div>
           <h1 className="h1" style={{ textAlign: "center" }}>{s.settings.lang === "es" ? "¡Mira tu móvil!" : "Check your phone!"}</h1>
+          <div className="tag" style={{ color: "#f5c518", fontSize: 16 }}>🎯 {tt.total} {T.missionsToday} · {stations.length} {T.onMap}</div>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center", maxWidth: 900 }}>
             {s.players.map((p) => <LingoBadge key={p.id} look={p.look} size={64} style={{ animation: "bob 1.4s ease-in-out infinite" }} />)}
           </div>
@@ -372,11 +375,38 @@ export function Countdown({ ms }: { ms: number }) {
   );
 }
 
+/* lobby: how many missions there are before the match starts */
+function MissionsPlate({ s, T }: { s: HostState; T: ReturnType<typeof g> }) {
+  const m = E.missionPreview(s);
+  const Num = ({ n, l }: { n: number | string; l: string }) => (
+    <div className="well" style={{ padding: "8px 12px", flex: "1 1 120px" }}>
+      <div style={{ font: "400 30px 'Archivo Black',sans-serif", color: "#f5c518", lineHeight: 1 }}>{n}</div>
+      <div style={{ fontSize: 13, color: "rgba(242,239,230,0.7)" }}>{l}</div>
+    </div>
+  );
+  return (
+    <div className="plate">
+      <div className="lbl lbl-y" style={{ marginBottom: 10 }}>🗺 {T.missionsTitle}</div>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
+        <Num n={m.onMap} l={`${T.onMap} · ${m.rooms} ${T.inRooms}`} />
+        <Num n={m.perStudent} l={T.perStudent} />
+        <Num n={m.classGoal || "—"} l={`${T.classGoal}${m.good ? ` (${m.good} × ${m.perStudent})` : ""}`} />
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(190px,1fr))", gap: "3px 12px", fontSize: 13 }}>
+        {stations.map((st) => {
+          const r = rooms.find((x) => x.id === st.room)!;
+          return <div key={st.id} style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}><span style={{ color: r.accent }}>■</span> <b>{r.en}</b> · {st.label}</div>;
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function TaskBar({ label, done, total }: { label: string; done: number; total: number }) {
   const pct = total ? Math.round((done / total) * 100) : 0;
   return (
     <div style={{ flex: "1 1 280px", minWidth: 200 }}>
-      <div className="lbl" style={{ marginBottom: 5 }}>{label} — {pct}%</div>
+      <div className="lbl" style={{ marginBottom: 5 }}>{label}: {done}/{total} — {pct}%</div>
       <span className="bar" style={{ height: 22, border: "3px solid #0e1113", display: "block" }}>
         <span style={{ width: pct + "%", backgroundImage: "repeating-linear-gradient(45deg,#7bbf5a 0 9px,#5f9a2b 9px 18px)", transition: "width .4s" }} />
       </span>

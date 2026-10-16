@@ -25,7 +25,7 @@ A word game for English classes, with two modes:
 
 ### The map
 
-There are 12 rooms plus 4 sales offices, and each room's sign shows its English and Spanish names. Every room has one mission:
+There are 12 rooms plus 4 sales offices, and each room's sign shows its English and Spanish names. Halls and doors are wide (doors fit four characters side by side), and a test checks that a "wide" body can reach every mission without squeezing through gaps. The plan is written in `src/game/map.ts` and scaled by `MAP_SCALE` when it loads. Every room has one mission:
 
 | Room | Mission |
 | --- | --- |
@@ -61,7 +61,9 @@ Demo games don't add points to your badge collection.
 
 ## Among Us–style mechanics (videogame mode)
 
-- **Vision blocked by walls.** Light spills through doorways but not through walls. Ghosts see everything and float through walls.
+- **Vision blocked by walls.** Light spills through doorways but not through walls. Outside your sight the academy is dimmed but still readable (like Among Us); only people and bodies are hidden. Lights-out makes it much darker. Ghosts see everything and float through walls.
+- **Finding your way.** Arrows on the screen edge point to your missions (yellow), the missing books (blue) and sabotage repairs (red). Walking into a room shows its name in English and Spanish. The 🗺 map shows every mission on the plan, which ones you've done and a "You are here" marker; on portrait phones it turns sideways so it's bigger.
+- **Mission counts.** Before the match the lobby shows how many missions are on the map, how many each good student gets and the class goal. The role card lists your missions, and the mission bar shows done/total.
 - **Eliminations.** Phone addicts have a cooldown. The killer snaps onto the victim's spot, the victim sees who got them, and nearby players see a ZAP effect.
 - **Vents** (phone addicts only). The vents form three linked networks. Hop between vents in the same network, then exit.
 - **Sabotage** (phone addicts only):
@@ -87,9 +89,11 @@ Students earn points during videogame mode:
 | Survive to the end | +1 |
 | Good students win / phone addicts win | +2 / +3 |
 
-Every **4 points** unlocks a random collectible card of a teacher from the Ibagué branch. There are 25 cards, and the coordinator's golden card only appears after 10 others. Points and cards are saved on each student's phone, so a student keeps their collection when they play on the same device. They can view it under **🏅 Badges** on the home page, in the lobby, or on the end screen. Card art and descriptions are in `src/badges/teachers.ts`; edit them there.
+Every **4 points** unlocks a random collectible card of a teacher from the Ibagué branch. There are 25 cards, and the coordinator's golden card only appears after 10 others. Points and cards are saved on each student's phone, so a student keeps their collection when they play on the same device. The collection is mirrored in IndexedDB and restored automatically if the browser clears localStorage, and the app asks the browser for persistent storage. The album also shows a short **backup code** (e.g. `1C-3F9K-2Q`) that restores the collection on any device, and the game can be added to the home screen (web app manifest), which also stops iOS from clearing its storage. They can view it under **🏅 Badges** on the home page, in the lobby, or on the end screen. Card art and descriptions are in `src/badges/teachers.ts`; edit them there.
 
 ## Screens fit any device
+
+The map is drawn once and the camera slides it on the GPU instead of redrawing it every frame. The fog is a small canvas, which gives soft edges for free. The game draws at most 60 times a second (30 when nothing moves). On slow phones it switches to a lighter mode automatically: fewer vision rays, no footstep dust and a coarser fog.
 
 Every screen fits the device without scrolling. A screen lays out for the device's width and shrinks evenly if it's still too tall (`src/shared/Fit.tsx`). On phones in landscape, the character designer and the meeting screen switch to a side-by-side layout.
 

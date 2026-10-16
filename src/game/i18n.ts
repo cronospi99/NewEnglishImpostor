@@ -40,7 +40,9 @@ const en = {
   demoMode: "Demo mode", demoTitle: "Play with bots", demoHelp: "Five bots have joined the shift. They walk around, do missions, eliminate, report bodies and vote. Press Start, then switch to your phone view with the button at the top.", projector: "Projector", phone: "Phone",
   badges: "My badges", pointsGame: "Points this game", reasons: { mission: "Missions", vote: "Correct votes", report: "Bodies reported", fix: "Sabotage fixed", elimination: "Eliminations", survive: "Survived", win: "Victory" } as Record<string, string>,
   eliminatedBy: "You were eliminated by", deadBody: "Dead body reported!", emergency: "Emergency meeting!", mute: "Sound", votedFor: "voted for",
-  moveHelp: "Drag anywhere to move · tap the buttons to act"
+  moveHelp: "Drag anywhere to move · tap the buttons to act",
+  missionsTitle: "Missions", onMap: "missions on the map", inRooms: "rooms", perStudent: "Each good student", classGoal: "Class goal",
+  missionsToday: "missions to complete together", yourMissions: "Your missions", ofOnMap: "of {n} on the map", youAreHere: "You are here", done: "done"
 };
 
 const es: typeof en = {
@@ -83,7 +85,9 @@ const es: typeof en = {
   demoMode: "Modo demo", demoTitle: "Juega con bots", demoHelp: "Cinco bots se unieron al turno. Caminan, hacen misiones, eliminan, avisan cuerpos y votan. Pulsa Empezar y cambia a la vista del móvil con el botón de arriba.", projector: "Proyector", phone: "Móvil",
   badges: "Mis insignias", pointsGame: "Puntos de esta partida", reasons: { mission: "Misiones", vote: "Votos correctos", report: "Cuerpos avisados", fix: "Sabotajes arreglados", elimination: "Eliminaciones", survive: "Sobreviviste", win: "Victoria" } as Record<string, string>,
   eliminatedBy: "Te eliminó", deadBody: "¡Cuerpo encontrado!", emergency: "¡Reunión de emergencia!", mute: "Sonido", votedFor: "votó a",
-  moveHelp: "Arrastra para moverte · toca los botones para actuar"
+  moveHelp: "Arrastra para moverte · toca los botones para actuar",
+  missionsTitle: "Misiones", onMap: "misiones en el mapa", inRooms: "salas", perStudent: "Cada buen estudiante", classGoal: "Meta de la clase",
+  missionsToday: "misiones para completar entre todos", yourMissions: "Tus misiones", ofOnMap: "de {n} en el mapa", youAreHere: "Estás aquí", done: "hechas"
 };
 
 export const G = { en, es };

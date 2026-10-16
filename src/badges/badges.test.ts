@@ -32,3 +32,18 @@ describe("teacher badges", () => {
     expect(loadProgress().owned).toHaveLength(25);
   });
 });
+
+describe("backup code", () => {
+  it("round-trips points and cards and rejects tampering", async () => {
+    const { backupCode, restoreCode, saveProgress, loadProgress } = await import("./progress");
+    saveProgress({ points: 37, owned: ["camila", "sander", "norvey"], rewarded: [], history: [] });
+    const code = backupCode();
+    expect(code).toMatch(/^[0-9A-Z]+-[0-9A-Z]+-[0-9A-Z]{2}$/);
+    saveProgress({ points: 0, owned: [], rewarded: [], history: [] });
+    expect(restoreCode(code.slice(0, -1) + (code.endsWith("A") ? "B" : "A"))).toBeNull();
+    const r = restoreCode(code.toLowerCase())!;
+    expect(r.points).toBe(37);
+    expect(r.owned.sort()).toEqual(["camila", "norvey", "sander"]);
+    expect(loadProgress().points).toBe(37);
+  });
+});

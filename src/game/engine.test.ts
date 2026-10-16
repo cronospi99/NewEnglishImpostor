@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import * as E from "./engine";
-import { ALARM_PANELS, BATH_DOOR, BELL, BOOK_SPOTS, FUSE, GUARD, RANGE, WORLD, dist, lineOfSight, offices, setBlocked, spawnPoint, stations, vents, walkable } from "./map";
+import { ALARM_PANELS, BATH_DOOR, BELL, BOOK_SPOTS, FUSE, GUARD, MAP_SCALE, RANGE, WORLD, doors, dist, lineOfSight, offices, setBlocked, spawnPoint, stations, vents, walkable } from "./map";
 import type { HostState, Look, Pos } from "./types";
 
 const look: Look = { color: 0, hat: "none", face: "none", extra: "none" };
@@ -275,8 +275,9 @@ describe("map", () => {
   });
 
   it("walls block line of sight but doors don't", () => {
-    expect(lineOfSight({ x: 350, y: 300 }, { x: 350, y: 620 })).toBe(true);
-    expect(lineOfSight({ x: 200, y: 300 }, { x: 200, y: 620 })).toBe(false);
+    const k = MAP_SCALE;
+    expect(lineOfSight({ x: 350 * k, y: 300 * k }, { x: 350 * k, y: 620 * k })).toBe(true);
+    expect(lineOfSight({ x: 200 * k, y: 300 * k }, { x: 200 * k, y: 620 * k })).toBe(false);
   });
 
   it.each(BOOK_SPOTS.map((b, i) => [i, b] as const))("book spot %i is reachable", (_i, b) => {
@@ -298,5 +299,39 @@ describe("map", () => {
 
   it("emergency bell is reachable", () => {
     expect(reachableNear(BELL, RANGE.bell - 15)).toBe(true);
+  });
+
+  it("doors are at least four characters wide", () => {
+    doors.forEach((d) => {
+      let span = 0;
+      for (let t = 0; t <= (d.v ? d.w : d.h); t += 2) {
+        const x = d.v ? d.x + t : d.x + d.w / 2, y = d.v ? d.y + d.h / 2 : d.y + t;
+        if (walkable(x, y)) span += 2;
+      }
+      expect(span, `${d.x},${d.y}`).toBeGreaterThanOrEqual(4 * 40);
+    });
+  });
+
+  it("a wide body can still reach every mission (no squeezing through gaps)", () => {
+    const fat = (x: number, y: number) => [[0, 0], [24, 0], [-24, 0], [0, 24], [0, -24]].every(([a, b]) => walkable(x + a, y + b));
+    const ok = new Uint8Array(W * H);
+    const q2: number[] = [sx, sy];
+    ok[sy * W + sx] = 1;
+    while (q2.length) {
+      const y = q2.pop()!, x = q2.pop()!;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx, ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= W || ny >= H || ok[ny * W + nx] || !fat(nx * step, ny * step)) continue;
+        ok[ny * W + nx] = 1; q2.push(nx, ny);
+      }
+    }
+    const near = (p: { x: number; y: number }, r: number) => {
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (ok[y * W + x] && dist({ x: x * step, y: y * step }, p) < r) return true;
+      return false;
+    };
+    stations.forEach((st) => expect(near(st, RANGE.use), st.id).toBe(true));
+    [FUSE, ...ALARM_PANELS].forEach((st) => expect(near(st, RANGE.fix), JSON.stringify(st)).toBe(true));
+    expect(near(BELL, RANGE.bell)).toBe(true);
+    offices.forEach((o) => expect(near({ x: o.r.x + o.r.w / 2, y: o.r.y + o.r.h / 2 }, 60), o.id).toBe(true));
   });
 });

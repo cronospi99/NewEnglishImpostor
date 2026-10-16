@@ -3,15 +3,15 @@ import { createPortal } from "react-dom";
 import { TEACHERS, POINTS_PER_CARD, type TeacherCard } from "./teachers";
 import { TeacherToon } from "./TeacherToon";
 import { useClock } from "../game/Character";
-import { loadProgress, nextCardAt, type Progress } from "./progress";
+import { backupCode, loadProgress, nextCardAt, restoreCode, type Progress } from "./progress";
 import { sfx } from "../game/sfx";
 import type { Lang } from "../shared/proximity";
 
 const K = "#0e1113";
 
 const L = {
-  en: { album: "Teacher badges", points: "points", next: "Next badge at", all: "Collection complete!", locked: "Locked", earn: "Earn points in Videogame mode: missions, correct votes, reports, fixing sabotage, surviving and winning.", unlocked: "New badge unlocked!", tap: "Tap to continue", close: "Close", per: "points per badge" },
-  es: { album: "Insignias de profes", points: "puntos", next: "Siguiente insignia a los", all: "¡Colección completa!", locked: "Bloqueada", earn: "Gana puntos en el modo videojuego: misiones, votos correctos, avisos, arreglar sabotajes, sobrevivir y ganar.", unlocked: "¡Nueva insignia!", tap: "Toca para continuar", close: "Cerrar", per: "puntos por insignia" }
+  en: { album: "Teacher badges", points: "points", next: "Next badge at", all: "Collection complete!", locked: "Locked", earn: "Earn points in Videogame mode: missions, correct votes, reports, fixing sabotage, surviving and winning.", unlocked: "New badge unlocked!", tap: "Tap to continue", close: "Close", per: "points per badge", saved: "Saved on this device", code: "Backup code", copy: "Copy", copied: "Copied ✓", restore: "Restore", paste: "Paste a code…", ok: "Badges restored ✓", bad: "That code isn't valid.", saveHelp: "Keep this code to recover your badges or move them to another phone. Tip: add the game to your home screen." },
+  es: { album: "Insignias de profes", points: "puntos", next: "Siguiente insignia a los", all: "¡Colección completa!", locked: "Bloqueada", earn: "Gana puntos en el modo videojuego: misiones, votos correctos, avisos, arreglar sabotajes, sobrevivir y ganar.", unlocked: "¡Nueva insignia!", tap: "Toca para continuar", close: "Cerrar", per: "puntos por insignia", saved: "Guardado en este dispositivo", code: "Código de respaldo", copy: "Copiar", copied: "Copiado ✓", restore: "Restaurar", paste: "Pega un código…", ok: "Insignias restauradas ✓", bad: "Ese código no es válido.", saveHelp: "Guarda este código para recuperar tus insignias o pasarlas a otro móvil. Consejo: añade el juego a tu pantalla de inicio." }
 };
 
 export function TeacherCardView({ card, owned = true, width = 180, animate = true, index }: { card: TeacherCard; owned?: boolean; width?: number; animate?: boolean; index?: number }) {
@@ -65,8 +65,42 @@ export function CardReveal({ ids, lang, onDone }: { ids: string[]; lang: Lang; o
   );
 }
 
+/* the collection lives on this device; the backup code moves it anywhere */
+function SavePlate({ T, onRestore }: { T: (typeof L)["en"]; onRestore: () => void }) {
+  const [code, setCode] = useState(() => backupCode());
+  const [copied, setCopied] = useState(false);
+  const [input, setInput] = useState("");
+  const [msg, setMsg] = useState("");
+  const copy = () => {
+    const done = () => { setCopied(true); setTimeout(() => setCopied(false), 1500); };
+    try { navigator.clipboard.writeText(code).then(done, done); } catch { done(); }
+  };
+  const restore = () => {
+    const r = restoreCode(input);
+    if (!r) { setMsg(T.bad); return; }
+    setMsg(T.ok); setInput(""); setCode(backupCode(r)); onRestore();
+  };
+  return (
+    <div className="plate" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 14px", padding: "10px 14px" }}>
+      <span className="lbl" style={{ color: "#7bbf5a" }}>💾 {T.saved}</span>
+      <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <span className="lbl">{T.code}</span>
+        <code style={{ font: "700 18px 'Space Mono',monospace", letterSpacing: "0.08em", color: "#f5c518", userSelect: "all" }}>{code}</code>
+        <button type="button" className="btn btn-s btn-sm" onClick={copy}>{copied ? T.copied : T.copy}</button>
+      </span>
+      <form onSubmit={(e) => { e.preventDefault(); restore(); }} style={{ display: "flex", gap: 6, alignItems: "center" }}>
+        <input className="field" value={input} placeholder={T.paste} onChange={(e) => { setInput(e.target.value.toUpperCase()); setMsg(""); }} style={{ width: 170, padding: "6px 8px", fontSize: 14 }} />
+        <button type="submit" className="btn btn-y btn-sm" disabled={!input.trim()}>{T.restore}</button>
+      </form>
+      {msg && <span style={{ fontSize: 13, color: msg === T.ok ? "#7bbf5a" : "#f0947a" }}>{msg}</span>}
+      <div style={{ flexBasis: "100%", fontSize: 12, color: "rgba(242,239,230,0.6)" }}>{T.saveHelp}</div>
+    </div>
+  );
+}
+
 export function BadgeAlbum({ lang, onClose, progress }: { lang: Lang; onClose?: () => void; progress?: Progress }) {
   const T = L[lang];
+  const [, bump] = useState(0);
   const p = progress || loadProgress();
   const at = nextCardAt(p);
   const pct = at ? Math.round(((p.points - (at - POINTS_PER_CARD)) / POINTS_PER_CARD) * 100) : 100;
@@ -104,6 +138,7 @@ export function BadgeAlbum({ lang, onClose, progress }: { lang: Lang; onClose?: 
           <div style={{ fontSize: 13, color: "rgba(242,239,230,0.6)", marginTop: 6 }}>{T.earn} ({POINTS_PER_CARD} {T.per})</div>
         </div>
       </div>
+      {!progress && <SavePlate T={T} onRestore={() => bump((x) => x + 1)} />}
       <div style={{ display: "grid", gridTemplateColumns: `repeat(${best.cols}, ${cardW}px)`, gap, justifyContent: "center" }}>
         {order.map(({ c, i }) => (
           <div key={c.id} onClick={() => p.owned.includes(c.id) && setZoom(c)} style={{ cursor: p.owned.includes(c.id) ? "zoom-in" : "default" }}>

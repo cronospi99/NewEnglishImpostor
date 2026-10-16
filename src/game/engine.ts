@@ -90,12 +90,23 @@ export function canStart(s: HostState) {
   return s.phase === "lobby" && s.players.filter((p) => p.connected).length >= 3;
 }
 
+/* how many phone addicts a game with n players gets */
+export const addictCount = (st: HostState["settings"], n: number) => Math.max(1, Math.min(st.impostors, Math.floor((n - 1) / 2)));
+
+/* mission numbers shown before the match starts */
+export function missionPreview(s: HostState) {
+  const n = s.players.filter((p) => p.connected).length;
+  const perStudent = Math.max(1, Math.min(stations.length, s.settings.tasksPerPlayer));
+  const good = n >= 3 ? n - addictCount(s.settings, n) : 0;
+  return { onMap: stations.length, rooms: new Set(stations.map((x) => x.room)).size, perStudent, good, classGoal: good * perStudent };
+}
+
 export function startGame(s: HostState, now: number): Out[] {
   s.players = s.players.filter((p) => p.connected);
   const ids = s.players.map((p) => p.id);
   if (ids.length < 3) return [];
   const st = s.settings;
-  const count = Math.max(1, Math.min(st.impostors, Math.floor((ids.length - 1) / 2)));
+  const count = addictCount(st, ids.length);
   const imps = pickImpostors(ids, count, s.prevImpostors);
   s.prevImpostors = imps;
   s.round += 1;
